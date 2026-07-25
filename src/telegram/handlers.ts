@@ -1,0 +1,87 @@
+import type { Context } from "telegraf";
+import type { Logger } from "../config/logger.js";
+import { sendLongMessage } from "./formatting.js";
+import type { Orchestrator } from "../agent/orchestrator.js";
+import type { InteractionAgent } from "../agent/interaction-agent.js";
+
+/**
+ * Register the main message handler that processes user messages
+ * through the agent and returns responses.
+ */
+export function registerHandlers(
+  bot: { on: (event: string, handler: (ctx: Context) => Promise<void>) => void },
+  orchestrator: Orchestrator,
+  interactionAgent: InteractionAgent | null,
+  logger: Logger,
+): void {
+  const log = logger.child({ component: "Handlers" });
+
+  bot.on("text", async (ctx: Context) => {
+    // Ignore commands (handled by command handlers)
+    if (ctx.message && "text" in ctx.message && ctx.message.text.startsWith("/")) {
+      return;
+    }
+
+    const userId = String(ctx.from?.id ?? "unknown");
+    const chatId = String(ctx.chat?.id ?? "unknown");
+    const messageText = ctx.message && "text" in ctx.message ? ctx.message.text : "";
+
+    if (!messageText) {
+      return;
+    }
+
+    log.debug({ userId, chatId, text: messageText.substring(0, 100) }, "Processing message");
+
+    // Send typing indicator
+    await ctx.sendChatAction("typing");
+
+    try {
+      if (interactionAgent) {
+        // Convex-backed path
+        const history: Array<{ role: string; content: string; toolCallId?: string }> = [];
+        const result = await interactionAgent.processMessage(
+          chatId,
+          userId,
+          messageText,
+          history,
+        );
+
+        // Send response
+        await sendLongMessage(ctx, result.response);
+
+        // Log usage if available
+        if (result.estimatedCost !== undefined || result.totalTokens !== undefined) {
+          log.info({
+            toolCalls: result.toolCalls,
+            toolCycles: result.toolCycles,
+            estimatedCost: result.estimatedCost,
+            totalTokens: result.totalTokens,
+          }, "Message processed (Convex path)");
+        }
+      } else {
+        // In-memory path
+        const result = await orchestrator.processMessage(userId, chatId, messageText);
+
+        // Send response
+        await sendLongMessage(ctx, result.response);
+
+        // Log usage
+        log.info({
+          toolCalls: result.toolCalls,
+          toolCycles: result.toolCycles,
+          estimatedCost: result.estimatedCost,
+          totalTokens: result.totalTokens,
+        }, "Message processed (in-memory path)");
+      }
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      log.error({ err: errorMsg }, "Error processing message");
+
+      try {
+        await ctx.reply("❌ An error occurred while processing your message. Please try again.");
+      } catch {
+        // Best effort
+      }
+    }
+  });
+}
