@@ -1,0 +1,36 @@
+services:
+  - type: web
+    name: boop-agent
+    env: node
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      # ── Required ──
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: AUTHORIZED_USER_ID
+        sync: false
+      # ── LLM Provider ──
+      - key: LLM_PROVIDER
+        value: openai
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: openrouter/free
+      - key: OPENAI_BASE_URL
+        value: https://openrouter.ai/api/v1
+      # ── Web Search ──
+      - key: TAVILY_API_KEY
+        sync: false
+      - key: TALORDATA_API_KEY
+        sync: false
+      - key: WEB_SEARCH_PROVIDER
+        value: talordata
+      # ── Bot Mode ──
+      - key: BOT_MODE
+        value: polling
+      - key: LOG_LEVEL
+        value: info
