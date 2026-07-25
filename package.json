@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "start": "npx tsx src/index.ts",
+    "start": "node dist/index.js",
     "build": "tsc",
     "convex:dev": "convex dev",
     "convex:deploy": "convex deploy"
