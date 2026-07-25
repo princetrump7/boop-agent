@@ -78,7 +78,7 @@ export function registerHandlers(
       log.error({ err: errorMsg }, "Error processing message");
 
       try {
-        await ctx.reply("❌ An error occurred while processing your message. Please try again.");
+        await ctx.reply("💥 Oops! Something went wrong on my end. Mind trying again? 😅");
       } catch {
         // Best effort
       }
