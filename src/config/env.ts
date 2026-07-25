@@ -62,7 +62,9 @@ const envSchema = z.object({
   // ── Web Search ──────────────────────────────────────
   // Tavily (preferred) — fallback to DuckDuckGo
   TAVILY_API_KEY: z.string().optional(),
-  WEB_SEARCH_PROVIDER: z.enum(["tavily", "scrape"]).default("scrape"),
+  // TalorData SERP API (alternative)
+  TALORDATA_API_KEY: z.string().optional(),
+  WEB_SEARCH_PROVIDER: z.enum(["tavily", "talordata", "scrape"]).default("scrape"),
 
   // ── Bot Mode ────────────────────────────────────────
   BOT_MODE: z.enum(["polling", "webhook"]).default("polling"),

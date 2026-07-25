@@ -44,6 +44,10 @@ export function createWebSearchTool(logger: Logger): Tool {
         return searchTavily(query, count, log);
       }
 
+      if (provider === "talordata" && env.TALORDATA_API_KEY) {
+        return searchTalorData(query, count, log);
+      }
+
       // Fallback: scrape-based search
       return searchViaScrape(query, count, log);
     },
@@ -94,6 +98,87 @@ async function searchTavily(query: string, count: number, log: Logger): Promise<
     };
   } catch (err) {
     log.error({ err }, "Tavily search error, falling back to scrape");
+    return searchViaScrape(query, count, log);
+  }
+}
+
+/**
+ * Search via TalorData SERP API.
+ * Uses the Bearer token auth and form-urlencoded POST format.
+ */
+async function searchTalorData(query: string, count: number, log: Logger): Promise<ToolResult> {
+  try {
+    const env = getEnv();
+    const response = await fetch("https://serpapi.talordata.net/serp/v1/request", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Authorization: `Bearer ${env.TALORDATA_API_KEY}`,
+      },
+      body: new URLSearchParams({
+        engine: "google",
+        q: query,
+        json: "1",
+        num: String(Math.min(count, 10)),
+      }),
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      log.error({ status: response.status, body: text }, "TalorData search failed");
+      return searchViaScrape(query, count, log);
+    }
+
+    const data = (await response.json()) as {
+      organic?: Array<{ title: string; link: string; snippet: string }>;
+      answer_box?: { answer?: string; snippet?: string; title?: string; link?: string };
+      knowledge_graph?: { title?: string; description?: string };
+    };
+
+    const parts: string[] = [];
+
+    // Answer box (featured snippet)
+    if (data.answer_box) {
+      const ab = data.answer_box;
+      parts.push(`Featured Answer:`);
+      if (ab.title) parts.push(`  Title: ${ab.title}`);
+      if (ab.answer) parts.push(`  Answer: ${ab.answer}`);
+      if (ab.snippet) parts.push(`  Snippet: ${ab.snippet}`);
+      if (ab.link) parts.push(`  Link: ${ab.link}`);
+    }
+
+    // Knowledge graph
+    if (data.knowledge_graph) {
+      const kg = data.knowledge_graph;
+      parts.push(`\nKnowledge Graph:`);
+      if (kg.title) parts.push(`  Title: ${kg.title}`);
+      if (kg.description) parts.push(`  Description: ${kg.description}`);
+    }
+
+    // Organic results
+    if (data.organic && data.organic.length > 0) {
+      for (const r of data.organic.slice(0, count)) {
+        parts.push(`\n---\nTitle: ${r.title}\nURL: ${r.link}\n${r.snippet?.slice(0, 1000) ?? ""}`);
+      }
+    }
+
+    if (parts.length === 0) {
+      return {
+        toolName: "web_search",
+        args: { query, count },
+        output: "No results found.",
+        success: true,
+      };
+    }
+
+    return {
+      toolName: "web_search",
+      args: { query, count },
+      output: parts.join("\n"),
+      success: true,
+    };
+  } catch (err) {
+    log.error({ err }, "TalorData search error, falling back to scrape");
     return searchViaScrape(query, count, log);
   }
 }
