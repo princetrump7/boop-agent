@@ -28,6 +28,18 @@ async function main(): Promise<void> {
   logger.info("Starting Boop Agent...");
   logger.info({ provider: env.LLM_PROVIDER ?? "anthropic" }, "LLM provider");
 
+  // Auth middleware silently drops every message from users who aren't in the
+  // allow-list. With no AUTHORIZED_USER_ID / AUTHORIZED_USER_IDS configured the
+  // bot looks healthy but answers nobody — surface that here so it's obvious in
+  // the Render logs.
+  if (!env.AUTHORIZED_USER_ID && env.AUTHORIZED_USER_IDS.length === 0) {
+    logger.warn(
+      "No authorized user configured (AUTHORIZED_USER_ID / AUTHORIZED_USER_IDS). " +
+        "The bot will IGNORE all messages. Set AUTHORIZED_USER_ID to your Telegram " +
+        "numeric ID (e.g. via @userinfobot).",
+    );
+  }
+
   // --- Create bot ---
   const botInstance = createBot(logger);
 

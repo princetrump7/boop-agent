@@ -98,7 +98,23 @@ export function getEnv(): EnvConfig {
     throw new Error(`Environment validation failed:\n${issues}`);
   }
 
-  cachedEnv = result.data;
+  // Fail fast when the selected LLM provider's API key is missing. Without
+  // this, the bot starts (and even passes health checks) but every AI call
+  // fails because the provider client is built with an `undefined` key — the
+  // service looks fine while actually answering nothing.
+  const env = result.data;
+  if (env.LLM_PROVIDER === "openai" && !env.OPENAI_API_KEY) {
+    throw new Error(
+      "Environment validation failed:\n  - OPENAI_API_KEY is required when LLM_PROVIDER=openai",
+    );
+  }
+  if (env.LLM_PROVIDER === "anthropic" && !env.ANTHROPIC_API_KEY) {
+    throw new Error(
+      "Environment validation failed:\n  - ANTHROPIC_API_KEY is required when LLM_PROVIDER=anthropic",
+    );
+  }
+
+  cachedEnv = env;
   return cachedEnv;
 }
 
