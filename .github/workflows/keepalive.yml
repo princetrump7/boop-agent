@@ -1,15 +1,25 @@
 name: Keep Alive
 
 # Render free instances sleep after ~15 min with no inbound traffic, which
-# kills long-polling bots. This pings the bot's URL every 5 min so the
-# instance stays awake. Telegram buffers updates for 24h, so even if a ping
-# is delayed the bot picks up missed messages on its next poll.
+# kills long-polling bots. This pings the bot's URL so the instance stays
+# awake. Telegram buffers updates for 24h, so even if a ping is delayed the
+# bot picks up missed messages on its next poll.
+#
+# Cadence note (2026-08-06): this was originally '*/5', but on a PRIVATE repo
+# each ~1-min run bills GitHub's 2000 min/mo Actions allowance — 2 repos × 288
+# runs/day would exhaust the account budget in ~3.5 days and break every other
+# scheduled workflow (incl. the trading-copilot briefs). GitHub's scheduler on
+# this account also fires hours late (observed 1.5–3.5h), so 5-min cadence
+# isn't achievable anyway. Every 2h is a budget-safe best effort. For TRUE
+# always-on, ping from outside GitHub: an external 5-min uptime monitor
+# (e.g. UptimeRobot) or a keepalive workflow in a PUBLIC repo (unlimited free
+# Actions minutes).
 #
 # If you rename the Render service / subdomain, update BOT_URL below.
 
 on:
   schedule:
-    - cron: '*/5 * * * *'
+    - cron: '17 */2 * * *'
   workflow_dispatch:
 
 jobs:
