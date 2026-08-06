@@ -1,0 +1,26 @@
+name: Keep Alive
+
+# Render free instances sleep after ~15 min with no inbound traffic, which
+# kills long-polling bots. This pings the bot's URL every 5 min so the
+# instance stays awake. Telegram buffers updates for 24h, so even if a ping
+# is delayed the bot picks up missed messages on its next poll.
+#
+# If you rename the Render service / subdomain, update BOT_URL below.
+
+on:
+  schedule:
+    # Every 5 min, offset off :00/:05 so runs don't pile into the top of the hour.
+    - cron: '3-58/5 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wake the Render instance
+        env:
+          BOT_URL: https://boop-agent-zp89.onrender.com/
+        run: |
+          curl -fsS --max-time 90 -o /dev/null \
+            -w "alive: HTTP %{http_code} in %{time_total}s\n" \
+            "$BOT_URL"
