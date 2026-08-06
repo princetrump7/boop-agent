@@ -9,8 +9,7 @@ name: Keep Alive
 
 on:
   schedule:
-    # Every 5 min, offset off :00/:05 so runs don't pile into the top of the hour.
-    - cron: '3-58/5 * * * *'
+    - cron: '*/5 * * * *'
   workflow_dispatch:
 
 jobs:
