@@ -59,7 +59,7 @@ async function main(): Promise<void> {
   app.get("/", (_req, res) => {
     res.json({
       name: "Boop Agent",
-      version: "1.0.0",
+      version: "0.3.0",
       description: "Unified AI agent for Telegram — Anthropic + OpenAI, Convex-backed persistent state, and extensible tool system.",
     });
   });

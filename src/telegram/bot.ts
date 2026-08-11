@@ -3,6 +3,7 @@ import { getEnv } from "../config/env.js";
 import type { Logger } from "../config/logger.js";
 import { Orchestrator } from "../agent/orchestrator.js";
 import { InteractionAgent } from "../agent/interaction-agent.js";
+import { createSystemPromptStore } from "../agent/system-prompt.js";
 import { authMiddleware } from "./auth.js";
 import { registerHandlers } from "./handlers.js";
 import { registerCommands } from "./commands.js";
@@ -42,17 +43,24 @@ export function createBot(logger: Logger): BotInstance {
     log.info("No Convex URL — using in-memory orchestrator only");
   }
 
+  // Per-chat system prompt store (Convex-backed when available)
+  const systemPromptStore = createSystemPromptStore(logger);
+  log.info(
+    { backend: systemPromptStore.backend },
+    "System prompt store initialized",
+  );
+
   // Apply auth middleware
   bot.use(authMiddleware(logger));
 
   // Register commands
-  registerCommands(bot, orchestrator, logger);
+  registerCommands(bot, orchestrator, systemPromptStore, logger);
 
   // Register approval callbacks
   registerApprovalCallbacks(bot, logger);
 
   // Register message handlers
-  registerHandlers(bot, orchestrator, interactionAgent, logger);
+  registerHandlers(bot, orchestrator, interactionAgent, systemPromptStore, logger);
 
   // Handle bot errors
   bot.catch((err, ctx) => {

@@ -3,6 +3,7 @@ import type { Logger } from "../config/logger.js";
 import { sendLongMessage } from "./formatting.js";
 import type { Orchestrator } from "../agent/orchestrator.js";
 import type { InteractionAgent } from "../agent/interaction-agent.js";
+import type { SystemPromptStore } from "../agent/system-prompt.js";
 
 /**
  * Register the main message handler that processes user messages
@@ -12,6 +13,7 @@ export function registerHandlers(
   bot: { on: (event: string, handler: (ctx: Context) => Promise<void>) => void },
   orchestrator: Orchestrator,
   interactionAgent: InteractionAgent | null,
+  systemPromptStore: SystemPromptStore,
   logger: Logger,
 ): void {
   const log = logger.child({ component: "Handlers" });
@@ -36,6 +38,10 @@ export function registerHandlers(
     await ctx.sendChatAction("typing");
 
     try {
+      // Resolve the per-chat custom system prompt (if any) so both agent
+      // paths use the same persona overrides.
+      const customPrompt = await systemPromptStore.get(chatId);
+
       if (interactionAgent) {
         // Convex-backed path
         const history: Array<{ role: string; content: string; toolCallId?: string }> = [];
@@ -44,6 +50,7 @@ export function registerHandlers(
           userId,
           messageText,
           history,
+          customPrompt ?? undefined,
         );
 
         // Send response
@@ -60,7 +67,12 @@ export function registerHandlers(
         }
       } else {
         // In-memory path
-        const result = await orchestrator.processMessage(userId, chatId, messageText);
+        const result = await orchestrator.processMessage(
+          userId,
+          chatId,
+          messageText,
+          customPrompt ?? undefined,
+        );
 
         // Send response
         await sendLongMessage(ctx, result.response);
