@@ -1,7 +1,8 @@
 import type { Context } from "telegraf";
 import type { Logger } from "../config/logger.js";
 import { getEnv } from "../config/env.js";
-import { sendLongMessage } from "./formatting.js";
+import type { EnvConfig } from "../config/env.js";
+import { sendLongMessage, escapeMarkdown, kv, commandList } from "./formatting.js";
 import type { Orchestrator } from "../agent/orchestrator.js";
 import type { SystemPromptStore } from "../agent/system-prompt.js";
 import { defaultSystemPrompt } from "../agent/providers/base.js";
@@ -22,7 +23,9 @@ export function registerCommands(
    */
   bot.command("start", async (ctx: Context) => {
     log.debug({ userId: ctx.from?.id }, "Command: start");
-    const name = ctx.from?.first_name || ctx.from?.username || "there";
+    const name = escapeMarkdown(
+      ctx.from?.first_name || ctx.from?.username || "there",
+    );
     await sendLongMessage(ctx, welcomeMessage(name));
   });
 
@@ -40,31 +43,33 @@ export function registerCommands(
   bot.command("status", async (ctx: Context) => {
     log.debug({ userId: ctx.from?.id }, "Command: status");
     const env = getEnv();
-    const provider = env.LLM_PROVIDER ?? "anthropic";
-    const model = provider === "openai"
-      ? (env.OPENAI_MODEL ?? "gpt-4o")
-      : (env.ANTHROPIC_MODEL ?? "claude-sonnet-4-20250514");
-    const convexAvailable = env.CONVEX_URL ? "Yes" : "No (in-memory mode)";
+    const { provider, model } = activeModel(env);
     const chatId = String(ctx.chat?.id ?? "unknown");
     const customPrompt = await systemPromptStore.get(chatId);
     const promptSource = customPrompt
       ? "Custom (this chat)"
       : env.SYSTEM_PROMPT
-        ? "Environment (SYSTEM_PROMPT)"
-        : "Default persona";
+        ? "Environment"
+        : "Default";
 
-    const status = [
-      "*🤖 Boop Agent Status*\n",
-      `*LLM Provider:* ${provider}`,
-      `*Model:* ${model}`,
-      `*Convex:* ${convexAvailable}`,
-      `*System Prompt:* ${promptSource}`,
-      `*Prompt Storage:* ${systemPromptStore.backend}`,
-      `*Tools:* ${orchestrator.getToolRegistry().size} registered`,
-      `*Authorized Users:* ${env.AUTHORIZED_USER_ID || env.AUTHORIZED_USER_IDS || "None configured"}`,
-    ].join("\n");
+    const lines = [
+      kv("Provider", provider),
+      kv("Model", `\`${model}\``),
+      kv("Persistence", env.CONVEX_URL ? "Convex" : "In-memory"),
+      kv("System prompt", promptSource),
+      kv("Prompt storage", systemPromptStore.backend),
+      kv("Tools", `${orchestrator.getToolRegistry().size} registered`),
+      kv(
+        "Authorized users",
+        String(
+          env.AUTHORIZED_USER_ID ||
+            env.AUTHORIZED_USER_IDS ||
+            "None configured",
+        ),
+      ),
+    ];
 
-    await sendLongMessage(ctx, status);
+    await sendLongMessage(ctx, `📊 *Status*\n\n${lines.join("\n")}`);
   });
 
   /**
@@ -75,7 +80,9 @@ export function registerCommands(
     const chatId = String(ctx.chat?.id ?? "unknown");
     log.debug({ userId, chatId }, "Command: reset");
     orchestrator.resetConversation(userId, chatId);
-    await ctx.reply("🧹 *Poof!* History reset. What's on your mind? 🤔", { parse_mode: "Markdown" });
+    await ctx.reply("✅ *Conversation reset.* Ready when you are.", {
+      parse_mode: "Markdown",
+    });
   });
 
   /**
@@ -86,19 +93,20 @@ export function registerCommands(
     const chatId = String(ctx.chat?.id ?? "unknown");
     log.debug({ userId, chatId }, "Command: new");
     orchestrator.resetConversation(userId, chatId);
-    await ctx.reply("✨ Fresh slate! Ready when you are. 🚀");
+    await ctx.reply("✨ *Fresh start.* New conversation — go ahead.", {
+      parse_mode: "Markdown",
+    });
   });
 
   /**
    * /model — Show current model
    */
   bot.command("model", async (ctx: Context) => {
-    const env = getEnv();
-    const provider = env.LLM_PROVIDER ?? "anthropic";
-    const model = provider === "openai"
-      ? (env.OPENAI_MODEL ?? "gpt-4o")
-      : (env.ANTHROPIC_MODEL ?? "claude-sonnet-4-20250514");
-    await ctx.reply(`🎯 I'm running on *${provider}* with \`${model}\``, { parse_mode: "Markdown" });
+    const { provider, model } = activeModel(getEnv());
+    await ctx.reply(
+      `🎯 *Model*\n\n${kv("Provider", provider)}\n${kv("Model", `\`${model}\``)}`,
+      { parse_mode: "Markdown" },
+    );
   });
 
   /**
@@ -118,17 +126,25 @@ export function registerCommands(
     // No arguments → show the current effective system prompt
     if (!args) {
       const custom = await systemPromptStore.get(chatId);
-      const effective = custom ?? env.SYSTEM_PROMPT ?? defaultSystemPrompt();
+      const effective = escapeMarkdown(
+        custom ?? env.SYSTEM_PROMPT ?? defaultSystemPrompt(),
+      );
       const source = custom
         ? "Custom (this chat)"
         : env.SYSTEM_PROMPT
-          ? "Environment (SYSTEM_PROMPT)"
-          : "Built-in default";
+          ? "Environment"
+          : "Default";
 
-      await sendLongMessage(
-        ctx,
-        `🧠 *System Prompt*\n\n*Source:* ${source}\n*Chat:* \`${chatId}\`\n\n${effective}\n\n---\n_Set a new one with \`/system set <prompt>\` or reset with \`/system reset\`._`,
-      );
+      const lines = [
+        kv("Source", source),
+        kv("Chat", `\`${chatId}\``),
+        "",
+        effective,
+        "",
+        "—",
+        "Use `/system set <prompt>` to change it, or `/system reset` to restore the default.",
+      ];
+      await sendLongMessage(ctx, `🧠 *System Prompt*\n\n${lines.join("\n")}`);
       return;
     }
 
@@ -137,7 +153,7 @@ export function registerCommands(
       await systemPromptStore.clear(chatId);
       log.debug({ chatId }, "System prompt reset");
       await ctx.reply(
-        "♻️ *System prompt reset.* I'm back to the environment or default persona.",
+        "♻️ *System prompt reset.* Back to the default persona.",
         { parse_mode: "Markdown" },
       );
       return;
@@ -145,24 +161,22 @@ export function registerCommands(
 
     if (args === "help") {
       await ctx.reply(
-        "🧠 *System Prompt Commands*\n\n" +
-          "`/system` — show the current prompt\n" +
-          "`/system set <prompt>` — set a custom prompt for this chat\n" +
-          "`/system reset` — clear the custom prompt\n\n" +
-          "The custom prompt is saved per chat and persists across restarts when Convex is configured.",
+        `🧠 *System Prompt*\n\n${commandList([
+          ["/system", "view the current prompt"],
+          ["/system set <prompt>", "set a custom prompt for this chat"],
+          ["/system reset", "restore the default"],
+        ])}\n\nCustom prompts are saved per chat and persist across restarts.`,
         { parse_mode: "Markdown" },
       );
       return;
     }
 
     // "set <prompt>" → strip the prefix
-    const prompt = args.startsWith("set ")
-      ? args.slice(4).trim()
-      : args;
+    const prompt = args.startsWith("set ") ? args.slice(4).trim() : args;
 
     if (!prompt) {
       await ctx.reply(
-        "⚠️ Please include a prompt, e.g. `/system set You are a pirate.`",
+        "⚠️ Please include a prompt — e.g. `/system set You are a pirate.`",
         { parse_mode: "Markdown" },
       );
       return;
@@ -170,9 +184,11 @@ export function registerCommands(
 
     await systemPromptStore.set(chatId, prompt);
     log.debug({ chatId }, "System prompt updated");
-    await ctx.reply(
-      `✅ *System prompt updated for this chat.*\n\n${prompt}\n\nUse \`/system\` to view it or \`/system reset\` to revert.`,
-      { parse_mode: "Markdown" },
+    await sendLongMessage(
+      ctx,
+      `✅ *System prompt updated.*\n\n${escapeMarkdown(
+        prompt,
+      )}\n\nUse \`/system\` to view it, or \`/system reset\` to restore the default.`,
     );
   });
 }
@@ -188,44 +204,54 @@ function extractCommandArgs(ctx: Context): string {
   return text.replace(/^\/\w+(?:@\w+)?\s*/, "").trim();
 }
 
+/** Resolve the active provider + model from the environment. */
+function activeModel(env: EnvConfig): { provider: string; model: string } {
+  const provider = env.LLM_PROVIDER ?? "anthropic";
+  const model =
+    provider === "openai"
+      ? env.OPENAI_MODEL ?? "gpt-4o"
+      : env.ANTHROPIC_MODEL ?? "claude-sonnet-4-20250514";
+  return { provider, model };
+}
+
 function welcomeMessage(name: string): string {
-  return `👋 Hey ${name}! I'm your *Boop agent*.
+  return `👋 *Hey ${name}, I'm Boop.*
 
-I can help you research, answer questions, and perform tasks using AI. Here's what I support:
+A calm, capable AI agent for Telegram — chat, research, remember, and get things done.
 
-🤖 *Agent Chat* — Send me any message and I'll respond with AI
-🔍 *Web Search* — I can search the web for current info
-🧠 *Memory* — I remember facts you tell me
-✅ *Safe Mode* — Dangerous actions wait for your approval
-
-Commands:
-/start — Show this message
-/new — Start a fresh conversation
-/model — Check or switch the active AI model
-/system — View the system prompt
-/system set <prompt> — Change the system prompt
-/system reset — Restore the default prompt
-/help — Get detailed help`;
+*Commands*
+${commandList([
+  ["/new", "start a fresh conversation"],
+  ["/model", "show the active model"],
+  ["/system", "view the system prompt"],
+  ["/status", "show agent configuration"],
+  ["/help", "full usage guide"],
+])}`;
 }
 
 function helpMessage(): string {
-  return `📋 *How to use your Boop agent*
+  return `📖 *Boop — Usage*
 
-Just send me any message and I'll respond with AI-powered help. Here's what I can do:
+Send me a message and I'll respond with AI.
 
-🤖 *Agent Chat* — Ask me anything! Research, coding, writing, analysis.
-🔍 *Web Search* — I can look up current info from the web for you.
-🧠 *Memory* — Tell me something to remember and I'll keep it for later.
-✅ *Safe Mode* — I'll ask for approval before doing anything risky.
+*Capabilities*
+• *Chat* — research, coding, writing, analysis
+• *Web* — live search and page fetching
+• *Memory* — facts you want me to keep
+• *Approvals* — risky actions wait for your OK
 
-Commands:
-/start — Show the welcome message
-/new — Start a fresh conversation
-/model — Check or switch the active AI model
-/system — View the current system prompt
-/system set <prompt> — Set a custom system prompt for this chat
-/system reset — Clear the custom prompt (back to default)
-/help — Show this help
+*Commands*
+${commandList([
+  ["/new", "start a fresh conversation"],
+  ["/model", "show the active model"],
+  ["/system", "view the system prompt"],
+  ["/status", "show agent configuration"],
+  ["/help", "this guide"],
+])}
 
-Give it a try — send me a message! 🚀`;
+*System prompt*
+${commandList([
+  ["/system set <prompt>", "customize my persona"],
+  ["/system reset", "restore the default"],
+])}`;
 }

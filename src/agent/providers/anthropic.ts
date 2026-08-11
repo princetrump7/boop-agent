@@ -23,8 +23,6 @@ export class AnthropicProvider implements LLMProvider {
   }
 
   async generate(params: GenerateParams): Promise<GenerateResponse> {
-    const model = params.maxTokens ? this.defaultModel : this.defaultModel;
-
     const systemMessage = params.systemPrompt;
 
     const messages = this.convertMessages(params.messages);
@@ -34,7 +32,7 @@ export class AnthropicProvider implements LLMProvider {
       : undefined;
 
     const response = await this.client.messages.create({
-      model,
+      model: this.defaultModel,
       max_tokens: params.maxTokens ?? 4096,
       system: systemMessage,
       messages,

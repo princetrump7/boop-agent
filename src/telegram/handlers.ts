@@ -90,7 +90,10 @@ export function registerHandlers(
       log.error({ err: errorMsg }, "Error processing message");
 
       try {
-        await ctx.reply("💥 Oops! Something went wrong on my end. Mind trying again? 😅");
+        await ctx.reply(
+          "💥 *Something went wrong.* Please try again in a moment.",
+          { parse_mode: "Markdown" },
+        );
       } catch {
         // Best effort
       }

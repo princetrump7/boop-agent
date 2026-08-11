@@ -1,6 +1,7 @@
 import { Markup } from "telegraf";
 import type { Context } from "telegraf";
 import type { Logger } from "../config/logger.js";
+import { escapeMarkdown } from "./formatting.js";
 
 /**
  * Human-in-the-loop approval system for sensitive operations.
@@ -56,7 +57,9 @@ export async function requestApproval(
 
   try {
     const msg = await ctx.reply(
-      `*🔐 Approval Required*\n\n*Action:* ${action}\n*Description:* ${description}\n\nApprove this action?`,
+      `🔐 *Approval Required*\n\n*Action* — ${escapeMarkdown(
+        action,
+      )}\n*Description* — ${escapeMarkdown(description)}\n\nApprove this action?`,
       {
         parse_mode: "Markdown",
         ...keyboard,
@@ -127,7 +130,9 @@ export function registerApprovalCallbacks(bot: { action: (pattern: RegExp, handl
 
       const statusText = action === "approve" ? "✅ Approved" : "❌ Denied";
       await ctx.editMessageText(
-        `*🔐 Approval Request*\n\n*Action:* ${request.action}\n*Status:* ${statusText}`,
+        `🔐 *Approval Request*\n\n*Action* — ${escapeMarkdown(
+          request.action,
+        )}\n*Status* — ${statusText}`,
         { parse_mode: "Markdown" },
       );
       await ctx.answerCbQuery(statusText);

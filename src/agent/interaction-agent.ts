@@ -132,7 +132,3 @@ export class InteractionAgent {
     return this.toolRegistry;
   }
 }
-
-/**
- * Default system prompt — the Ayanokōji persona from boop-telegram.
- */
