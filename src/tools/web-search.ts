@@ -11,7 +11,8 @@ export function createWebSearchTool(logger: Logger): Tool {
   return {
     definition: {
       name: "web_search",
-      description: "Search the web for up-to-date information. Use this to find current news, data, or facts.",
+      description:
+        "Search the web for up-to-date information. Use this to find current news, data, or facts.",
       inputSchema: {
         type: "object",
         properties: {
@@ -34,7 +35,13 @@ export function createWebSearchTool(logger: Logger): Tool {
       const count = Math.min(Math.max(Number(args.count) || 5, 1), 10);
 
       if (!query) {
-        return { toolName: "web_search", args, output: "", success: false, error: "Query is required" };
+        return {
+          toolName: "web_search",
+          args,
+          output: "",
+          success: false,
+          error: "Query is required",
+        };
       }
 
       const env = getEnv();
@@ -222,7 +229,9 @@ async function searchViaScrape(query: string, count: number, log: Logger): Promi
 
     while ((linkMatch = linkRegex.exec(html)) !== null) {
       const title = linkMatch[2].replace(/<[^>]+>/g, "").trim();
-      const url = linkMatch[1].startsWith("http") ? linkMatch[1] : `https://duckduckgo.com${linkMatch[1]}`;
+      const url = linkMatch[1].startsWith("http")
+        ? linkMatch[1]
+        : `https://duckduckgo.com${linkMatch[1]}`;
       links.push(title || url);
     }
 

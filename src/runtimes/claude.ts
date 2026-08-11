@@ -61,7 +61,11 @@ export async function runClaudeAgent(
       if (tool) {
         try {
           log.debug({ toolName: tc.name, args: tc.args }, "Executing tool");
-          const toolOutput = await tool.execute(typeof tc.args === "string" ? JSON.parse(tc.args) as Record<string, unknown> : tc.args);
+          const toolOutput = await tool.execute(
+            typeof tc.args === "string"
+              ? (JSON.parse(tc.args) as Record<string, unknown>)
+              : tc.args,
+          );
           messages.push({
             role: "assistant",
             content: assistantContent,
@@ -111,7 +115,8 @@ export async function runClaudeAgent(
 
   // Get final assistant response
   const finalMessage = messages[messages.length - 1];
-  const response = finalMessage?.role === "assistant" ? finalMessage.content : "Processing complete.";
+  const response =
+    finalMessage?.role === "assistant" ? finalMessage.content : "Processing complete.";
 
   // Rough cost estimate (Claude Sonnet 4: $3/M input, $15/M output)
   const inputCost = (totalInputTokens / 1_000_000) * 3;
@@ -120,7 +125,7 @@ export async function runClaudeAgent(
 
   return {
     response,
-    toolCalls: toolCycles > 1 || (messages.filter((m) => m.role === "tool").length > 0),
+    toolCalls: toolCycles > 1 || messages.filter((m) => m.role === "tool").length > 0,
     toolCycles,
     messages,
     estimatedCost,

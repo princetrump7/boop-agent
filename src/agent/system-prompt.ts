@@ -49,9 +49,7 @@ export class ConvexSystemPromptStore implements SystemPromptStore {
         key: SETTINGS_KEY,
       });
       const value = unwrapConvexResponse(raw);
-      return typeof value === "string" && value.trim().length > 0
-        ? value
-        : undefined;
+      return typeof value === "string" && value.trim().length > 0 ? value : undefined;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this.logger.error({ error: message }, "Failed to read system prompt from Convex");

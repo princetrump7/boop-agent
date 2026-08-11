@@ -40,9 +40,7 @@ export const listByChatStatus = query({
     if (args.status) {
       return await ctx.db
         .query("drafts")
-        .withIndex("byChatIdStatus", (q) =>
-          q.eq("chatId", args.chatId!).eq("status", args.status!)
-        )
+        .withIndex("byChatIdStatus", (q) => q.eq("chatId", args.chatId!).eq("status", args.status!))
         .collect();
     }
     return await ctx.db

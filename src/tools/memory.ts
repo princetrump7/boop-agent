@@ -11,7 +11,8 @@ export function createMemoryTools(memory: MemoryStore, logger: Logger): Tool[] {
   const recallTool: Tool = {
     definition: {
       name: "recall",
-      description: "Recall stored memories. Use this to retrieve information you previously saved about the user or conversation.",
+      description:
+        "Recall stored memories. Use this to retrieve information you previously saved about the user or conversation.",
       inputSchema: {
         type: "object",
         properties: {
@@ -61,7 +62,9 @@ export function createMemoryTools(memory: MemoryStore, logger: Logger): Tool[] {
         }
 
         const formatted = entries
-          .map((e) => `- ${e.key}${e.category ? ` [${e.category}]` : ""}: ${e.content.slice(0, 200)}`)
+          .map(
+            (e) => `- ${e.key}${e.category ? ` [${e.category}]` : ""}: ${e.content.slice(0, 200)}`,
+          )
           .join("\n");
 
         return {
@@ -81,7 +84,8 @@ export function createMemoryTools(memory: MemoryStore, logger: Logger): Tool[] {
   const writeMemoryTool: Tool = {
     definition: {
       name: "write_memory",
-      description: "Store a memory. Use this to remember important information about the user, their preferences, or conversation context for future reference.",
+      description:
+        "Store a memory. Use this to remember important information about the user, their preferences, or conversation context for future reference.",
       inputSchema: {
         type: "object",
         properties: {

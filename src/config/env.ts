@@ -23,7 +23,7 @@ const envSchema = z.object({
             .map((s) => s.trim())
             .filter(Boolean)
             .map(Number)
-        : []
+        : [],
     ),
   AUTHORIZED_CHAT_IDS: z
     .string()
@@ -35,7 +35,7 @@ const envSchema = z.object({
             .map((s) => s.trim())
             .filter(Boolean)
             .map(Number)
-        : []
+        : [],
     ),
 
   // ── LLM Provider ────────────────────────────────────

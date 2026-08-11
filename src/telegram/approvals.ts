@@ -100,7 +100,10 @@ function sleep(ms: number): Promise<void> {
 /**
  * Handle approval callback queries (inline button clicks).
  */
-export function registerApprovalCallbacks(bot: { action: (pattern: RegExp, handler: (ctx: Context) => Promise<void>) => void }, logger: Logger): void {
+export function registerApprovalCallbacks(
+  bot: { action: (pattern: RegExp, handler: (ctx: Context) => Promise<void>) => void },
+  logger: Logger,
+): void {
   const log = logger.child({ component: "Approvals" });
 
   // "approve:{id}" or "deny:{id}"

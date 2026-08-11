@@ -16,7 +16,7 @@ export const insert = mutation({
       v.object({
         inputTokens: v.number(),
         outputTokens: v.number(),
-      })
+      }),
     ),
   },
   handler: async (ctx, args) => {
@@ -62,9 +62,7 @@ export const listByTurn = query({
   handler: async (ctx, args) => {
     return await ctx.db
       .query("messages")
-      .withIndex("byChatIdTurnId", (q) =>
-        q.eq("chatId", args.chatId).eq("turnId", args.turnId)
-      )
+      .withIndex("byChatIdTurnId", (q) => q.eq("chatId", args.chatId).eq("turnId", args.turnId))
       .collect();
   },
 });

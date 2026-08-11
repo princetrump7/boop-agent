@@ -55,8 +55,10 @@ export interface LLMProvider {
 
   /** Stream a response — optional */
   generateStream?: (
-    params: GenerateParams
-  ) => AsyncIterable<{ type: "text"; content: string } | { type: "tool_use"; toolCall: ToolCallResult }>;
+    params: GenerateParams,
+  ) => AsyncIterable<
+    { type: "text"; content: string } | { type: "tool_use"; toolCall: ToolCallResult }
+  >;
 }
 
 /**

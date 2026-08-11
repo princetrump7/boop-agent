@@ -45,10 +45,7 @@ export function createBot(logger: Logger): BotInstance {
 
   // Per-chat system prompt store (Convex-backed when available)
   const systemPromptStore = createSystemPromptStore(logger);
-  log.info(
-    { backend: systemPromptStore.backend },
-    "System prompt store initialized",
-  );
+  log.info({ backend: systemPromptStore.backend }, "System prompt store initialized");
 
   // Apply auth middleware
   bot.use(authMiddleware(logger));

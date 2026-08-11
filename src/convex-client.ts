@@ -56,12 +56,13 @@ export class ConvexClient {
     return this.call("Action", name, args);
   }
 
-  private async call(type: "Query" | "Mutation" | "Action", name: string, args: Record<string, unknown>): Promise<unknown> {
-    const path = type === "Query"
-      ? "/api/query"
-      : type === "Mutation"
-        ? "/api/mutation"
-        : "/api/action";
+  private async call(
+    type: "Query" | "Mutation" | "Action",
+    name: string,
+    args: Record<string, unknown>,
+  ): Promise<unknown> {
+    const path =
+      type === "Query" ? "/api/query" : type === "Mutation" ? "/api/mutation" : "/api/action";
 
     const headers: Record<string, string> = {
       "Content-Type": "application/json",

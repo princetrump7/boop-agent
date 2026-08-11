@@ -32,7 +32,8 @@ export function createDraftTools(logger: Logger): Tool[] {
   const saveDraftTool: Tool = {
     definition: {
       name: "save_draft",
-      description: "Save a draft of your current work (code, content, analysis) that can be reviewed later.",
+      description:
+        "Save a draft of your current work (code, content, analysis) that can be reviewed later.",
       inputSchema: {
         type: "object",
         properties: {
@@ -120,9 +121,7 @@ export function createDraftTools(logger: Logger): Tool[] {
         const statusFilter = args.status as string | undefined;
         const entries = Array.from(draftStore.values());
 
-        const filtered = statusFilter
-          ? entries.filter((d) => d.status === statusFilter)
-          : entries;
+        const filtered = statusFilter ? entries.filter((d) => d.status === statusFilter) : entries;
 
         if (filtered.length === 0) {
           return {
@@ -133,9 +132,7 @@ export function createDraftTools(logger: Logger): Tool[] {
           };
         }
 
-        const formatted = filtered
-          .map((d) => `- [${d.id}] ${d.title} (${d.status})`)
-          .join("\n");
+        const formatted = filtered.map((d) => `- [${d.id}] ${d.title} (${d.status})`).join("\n");
 
         return {
           toolName: "list_drafts",

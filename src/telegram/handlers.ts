@@ -58,12 +58,15 @@ export function registerHandlers(
 
         // Log usage if available
         if (result.estimatedCost !== undefined || result.totalTokens !== undefined) {
-          log.info({
-            toolCalls: result.toolCalls,
-            toolCycles: result.toolCycles,
-            estimatedCost: result.estimatedCost,
-            totalTokens: result.totalTokens,
-          }, "Message processed (Convex path)");
+          log.info(
+            {
+              toolCalls: result.toolCalls,
+              toolCycles: result.toolCycles,
+              estimatedCost: result.estimatedCost,
+              totalTokens: result.totalTokens,
+            },
+            "Message processed (Convex path)",
+          );
         }
       } else {
         // In-memory path
@@ -78,22 +81,24 @@ export function registerHandlers(
         await sendLongMessage(ctx, result.response);
 
         // Log usage
-        log.info({
-          toolCalls: result.toolCalls,
-          toolCycles: result.toolCycles,
-          estimatedCost: result.estimatedCost,
-          totalTokens: result.totalTokens,
-        }, "Message processed (in-memory path)");
+        log.info(
+          {
+            toolCalls: result.toolCalls,
+            toolCycles: result.toolCycles,
+            estimatedCost: result.estimatedCost,
+            totalTokens: result.totalTokens,
+          },
+          "Message processed (in-memory path)",
+        );
       }
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       log.error({ err: errorMsg }, "Error processing message");
 
       try {
-        await ctx.reply(
-          "💥 *Something went wrong.* Please try again in a moment.",
-          { parse_mode: "Markdown" },
-        );
+        await ctx.reply("💥 *Something went wrong.* Please try again in a moment.", {
+          parse_mode: "Markdown",
+        });
       } catch {
         // Best effort
       }

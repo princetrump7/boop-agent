@@ -1,8 +1,12 @@
 import "dotenv/config";
 import express from "express";
+import { createRequire } from "node:module";
 import { getEnv } from "./config/env.js";
 import { createLogger } from "./config/logger.js";
 import { createBot } from "./telegram/bot.js";
+
+const require = createRequire(import.meta.url);
+const { version } = require("../package.json") as { version: string };
 
 /**
  * Boop Agent — Unified AI Agent for Telegram.
@@ -46,10 +50,12 @@ async function main(): Promise<void> {
   // --- Express health-check server ---
   const app = express();
   const port = env.PORT;
+  app.disable("x-powered-by");
 
   app.get("/health", (_req, res) => {
     res.json({
       status: "ok",
+      version,
       provider: env.LLM_PROVIDER ?? "anthropic",
       convex: !!env.CONVEX_URL,
       tools: botInstance.orchestrator.getToolRegistry().size,
@@ -59,8 +65,9 @@ async function main(): Promise<void> {
   app.get("/", (_req, res) => {
     res.json({
       name: "Boop Agent",
-      version: "0.3.0",
-      description: "Unified AI agent for Telegram — Anthropic + OpenAI, Convex-backed persistent state, and extensible tool system.",
+      version,
+      description:
+        "Unified AI agent for Telegram — Anthropic + OpenAI, Convex-backed persistent state, and extensible tool system.",
     });
   });
 

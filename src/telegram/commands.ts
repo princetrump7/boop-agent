@@ -23,9 +23,7 @@ export function registerCommands(
    */
   bot.command("start", async (ctx: Context) => {
     log.debug({ userId: ctx.from?.id }, "Command: start");
-    const name = escapeMarkdown(
-      ctx.from?.first_name || ctx.from?.username || "there",
-    );
+    const name = escapeMarkdown(ctx.from?.first_name || ctx.from?.username || "there");
     await sendLongMessage(ctx, welcomeMessage(name));
   });
 
@@ -61,11 +59,7 @@ export function registerCommands(
       kv("Tools", `${orchestrator.getToolRegistry().size} registered`),
       kv(
         "Authorized users",
-        String(
-          env.AUTHORIZED_USER_ID ||
-            env.AUTHORIZED_USER_IDS ||
-            "None configured",
-        ),
+        String(env.AUTHORIZED_USER_ID || env.AUTHORIZED_USER_IDS || "None configured"),
       ),
     ];
 
@@ -103,10 +97,9 @@ export function registerCommands(
    */
   bot.command("model", async (ctx: Context) => {
     const { provider, model } = activeModel(getEnv());
-    await ctx.reply(
-      `🎯 *Model*\n\n${kv("Provider", provider)}\n${kv("Model", `\`${model}\``)}`,
-      { parse_mode: "Markdown" },
-    );
+    await ctx.reply(`🎯 *Model*\n\n${kv("Provider", provider)}\n${kv("Model", `\`${model}\``)}`, {
+      parse_mode: "Markdown",
+    });
   });
 
   /**
@@ -126,14 +119,8 @@ export function registerCommands(
     // No arguments → show the current effective system prompt
     if (!args) {
       const custom = await systemPromptStore.get(chatId);
-      const effective = escapeMarkdown(
-        custom ?? env.SYSTEM_PROMPT ?? defaultSystemPrompt(),
-      );
-      const source = custom
-        ? "Custom (this chat)"
-        : env.SYSTEM_PROMPT
-          ? "Environment"
-          : "Default";
+      const effective = escapeMarkdown(custom ?? env.SYSTEM_PROMPT ?? defaultSystemPrompt());
+      const source = custom ? "Custom (this chat)" : env.SYSTEM_PROMPT ? "Environment" : "Default";
 
       const lines = [
         kv("Source", source),
@@ -152,10 +139,9 @@ export function registerCommands(
     if (args === "reset" || args === "clear" || args === "default") {
       await systemPromptStore.clear(chatId);
       log.debug({ chatId }, "System prompt reset");
-      await ctx.reply(
-        "♻️ *System prompt reset.* Back to the default persona.",
-        { parse_mode: "Markdown" },
-      );
+      await ctx.reply("♻️ *System prompt reset.* Back to the default persona.", {
+        parse_mode: "Markdown",
+      });
       return;
     }
 
@@ -175,10 +161,9 @@ export function registerCommands(
     const prompt = args.startsWith("set ") ? args.slice(4).trim() : args;
 
     if (!prompt) {
-      await ctx.reply(
-        "⚠️ Please include a prompt — e.g. `/system set You are a pirate.`",
-        { parse_mode: "Markdown" },
-      );
+      await ctx.reply("⚠️ Please include a prompt — e.g. `/system set You are a pirate.`", {
+        parse_mode: "Markdown",
+      });
       return;
     }
 
@@ -199,9 +184,9 @@ export function registerCommands(
  * Handles both `/system set foo` and `/system@MyBot set foo`, returning
  * the raw remainder (e.g. `set foo`) or "" when there are no arguments.
  */
-function extractCommandArgs(ctx: Context): string {
+export function extractCommandArgs(ctx: Context): string {
   const text = ctx.message && "text" in ctx.message ? ctx.message.text : "";
-  return text.replace(/^\/\w+(?:@\w+)?\s*/, "").trim();
+  return text.replace(/^\s*\/\w+(?:@\w+)?\s*/, "").trim();
 }
 
 /** Resolve the active provider + model from the environment. */
@@ -209,8 +194,8 @@ function activeModel(env: EnvConfig): { provider: string; model: string } {
   const provider = env.LLM_PROVIDER ?? "anthropic";
   const model =
     provider === "openai"
-      ? env.OPENAI_MODEL ?? "gpt-4o"
-      : env.ANTHROPIC_MODEL ?? "claude-sonnet-4-20250514";
+      ? (env.OPENAI_MODEL ?? "gpt-4o")
+      : (env.ANTHROPIC_MODEL ?? "claude-sonnet-4-20250514");
   return { provider, model };
 }
 

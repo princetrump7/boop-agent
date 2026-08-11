@@ -49,7 +49,7 @@ export default defineSchema({
       v.object({
         inputTokens: v.number(),
         outputTokens: v.number(),
-      })
+      }),
     ),
     createdAt: v.number(),
   })

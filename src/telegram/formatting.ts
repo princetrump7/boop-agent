@@ -41,7 +41,6 @@ export async function sendLongMessage(
       // Flush current chunk
       if (currentChunk) {
         await sendChunk(ctx, currentChunk, parseMode, options.replyTo);
-        currentChunk = "";
       }
 
       // If the paragraph itself is too long, split by sentences
@@ -49,9 +48,7 @@ export async function sendLongMessage(
         const sentences = para.match(/[^.!?\n]+[.!?\n]*/g) ?? [para];
         let sentenceChunk = "";
         for (const sentence of sentences) {
-          const candidateSentence = sentenceChunk
-            ? `${sentenceChunk}${sentence}`
-            : sentence;
+          const candidateSentence = sentenceChunk ? `${sentenceChunk}${sentence}` : sentence;
           if (candidateSentence.length > maxLen) {
             if (sentenceChunk) {
               await sendChunk(ctx, sentenceChunk.trim(), parseMode, options.replyTo);
@@ -85,9 +82,7 @@ async function sendChunk(
   parseMode: ParseMode,
   replyTo?: number,
 ): Promise<void> {
-  const replyParams = replyTo
-    ? { reply_parameters: { message_id: replyTo } }
-    : {};
+  const replyParams = replyTo ? { reply_parameters: { message_id: replyTo } } : {};
 
   try {
     await ctx.reply(text, { parse_mode: parseMode, ...replyParams });
@@ -124,7 +119,7 @@ export function commandList(items: Array<[string, string]>): string {
  */
 function stripMarkdown(text: string): string {
   return text
-    .replace(/[*_~`#\[\]()>|]/g, "")
+    .replace(/[*_~`#[\])()>|]/g, "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }

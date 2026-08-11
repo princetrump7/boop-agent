@@ -17,11 +17,7 @@ export class OpenAIProvider implements LLMProvider {
   private client: OpenAI;
   private defaultModel: string;
 
-  constructor(
-    apiKey: string,
-    defaultModel = "gpt-4o",
-    baseURL?: string
-  ) {
+  constructor(apiKey: string, defaultModel = "gpt-4o", baseURL?: string) {
     this.client = new OpenAI({
       apiKey,
       baseURL: baseURL ?? undefined,
@@ -32,9 +28,8 @@ export class OpenAIProvider implements LLMProvider {
   async generate(params: GenerateParams): Promise<GenerateResponse> {
     const messages = this.convertMessages(params.messages, params.systemPrompt);
 
-    const tools = params.tools.length > 0
-      ? params.tools.map((t) => this.convertTool(t))
-      : undefined;
+    const tools =
+      params.tools.length > 0 ? params.tools.map((t) => this.convertTool(t)) : undefined;
 
     const response = await this.client.chat.completions.create({
       model: this.defaultModel,
@@ -48,12 +43,13 @@ export class OpenAIProvider implements LLMProvider {
   }
 
   async *generateStream(
-    params: GenerateParams
-  ): AsyncIterable<{ type: "text"; content: string } | { type: "tool_use"; toolCall: ToolCallResult }> {
+    params: GenerateParams,
+  ): AsyncIterable<
+    { type: "text"; content: string } | { type: "tool_use"; toolCall: ToolCallResult }
+  > {
     const messages = this.convertMessages(params.messages, params.systemPrompt);
-    const tools = params.tools.length > 0
-      ? params.tools.map((t) => this.convertTool(t))
-      : undefined;
+    const tools =
+      params.tools.length > 0 ? params.tools.map((t) => this.convertTool(t)) : undefined;
 
     const stream = await this.client.chat.completions.create({
       model: this.defaultModel,
@@ -109,7 +105,7 @@ export class OpenAIProvider implements LLMProvider {
 
   private convertMessages(
     messages: LLMMessage[],
-    systemPrompt: string
+    systemPrompt: string,
   ): OpenAI.Chat.ChatCompletionMessageParam[] {
     const result: OpenAI.Chat.ChatCompletionMessageParam[] = [
       { role: "system", content: systemPrompt },
@@ -161,13 +157,11 @@ export class OpenAIProvider implements LLMProvider {
     };
   }
 
-  private convertResponse(
-    response: OpenAI.Chat.Completions.ChatCompletion
-  ): GenerateResponse {
+  private convertResponse(response: OpenAI.Chat.Completions.ChatCompletion): GenerateResponse {
     const choice = response.choices[0];
     const message = choice?.message;
 
-    let content = message?.content ?? "";
+    const content = message?.content ?? "";
     const toolCalls: ToolCallResult[] = [];
 
     if (message?.tool_calls) {
@@ -183,13 +177,14 @@ export class OpenAIProvider implements LLMProvider {
     return {
       content,
       toolCalls,
-      finishReason: choice?.finish_reason === "stop"
-        ? "stop"
-        : choice?.finish_reason === "tool_calls"
-          ? "tool_use"
-          : choice?.finish_reason === "length"
-            ? "max_tokens"
-            : "stop",
+      finishReason:
+        choice?.finish_reason === "stop"
+          ? "stop"
+          : choice?.finish_reason === "tool_calls"
+            ? "tool_use"
+            : choice?.finish_reason === "length"
+              ? "max_tokens"
+              : "stop",
       usage: {
         inputTokens: response.usage?.prompt_tokens ?? 0,
         outputTokens: response.usage?.completion_tokens ?? 0,

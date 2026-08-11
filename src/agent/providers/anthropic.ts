@@ -27,9 +27,8 @@ export class AnthropicProvider implements LLMProvider {
 
     const messages = this.convertMessages(params.messages);
 
-    const tools = params.tools.length > 0
-      ? params.tools.map((t) => this.convertTool(t))
-      : undefined;
+    const tools =
+      params.tools.length > 0 ? params.tools.map((t) => this.convertTool(t)) : undefined;
 
     const response = await this.client.messages.create({
       model: this.defaultModel,
@@ -44,13 +43,14 @@ export class AnthropicProvider implements LLMProvider {
   }
 
   async *generateStream(
-    params: GenerateParams
-  ): AsyncIterable<{ type: "text"; content: string } | { type: "tool_use"; toolCall: ToolCallResult }> {
+    params: GenerateParams,
+  ): AsyncIterable<
+    { type: "text"; content: string } | { type: "tool_use"; toolCall: ToolCallResult }
+  > {
     const model = this.defaultModel;
     const messages = this.convertMessages(params.messages);
-    const tools = params.tools.length > 0
-      ? params.tools.map((t) => this.convertTool(t))
-      : undefined;
+    const tools =
+      params.tools.length > 0 ? params.tools.map((t) => this.convertTool(t)) : undefined;
 
     const stream = await this.client.messages.create({
       model,
@@ -65,10 +65,7 @@ export class AnthropicProvider implements LLMProvider {
     for await (const chunk of stream) {
       if (chunk.type === "content_block_delta" && chunk.delta.type === "text_delta") {
         yield { type: "text", content: chunk.delta.text };
-      } else if (
-        chunk.type === "content_block_start" &&
-        chunk.content_block.type === "tool_use"
-      ) {
+      } else if (chunk.type === "content_block_start" && chunk.content_block.type === "tool_use") {
         yield {
           type: "tool_use",
           toolCall: {
@@ -93,7 +90,9 @@ export class AnthropicProvider implements LLMProvider {
         if (lastMsg && lastMsg.role === "user") {
           // Append to existing user message
           lastMsg.content = [
-            ...(Array.isArray(lastMsg.content) ? lastMsg.content : [{ type: "text" as const, text: lastMsg.content as string }]),
+            ...(Array.isArray(lastMsg.content)
+              ? lastMsg.content
+              : [{ type: "text" as const, text: lastMsg.content as string }]),
             {
               type: "tool_result" as const,
               tool_use_id: msg.toolCallId ?? "",
@@ -114,7 +113,9 @@ export class AnthropicProvider implements LLMProvider {
         }
       } else if (msg.role === "assistant" && msg.toolCallId) {
         // Tool-use message (assistant requesting a tool)
-        const content: Anthropic.ContentBlock[] = [{ type: "text", text: msg.content, citations: null }];
+        const content: Anthropic.ContentBlock[] = [
+          { type: "text", text: msg.content, citations: null },
+        ];
         if (msg.toolName && msg.toolCallId) {
           content.push({
             type: "tool_use",
@@ -162,13 +163,14 @@ export class AnthropicProvider implements LLMProvider {
     return {
       content,
       toolCalls,
-      finishReason: response.stop_reason === "end_turn"
-        ? "stop"
-        : response.stop_reason === "tool_use"
-          ? "tool_use"
-          : response.stop_reason === "max_tokens"
-            ? "max_tokens"
-            : "stop",
+      finishReason:
+        response.stop_reason === "end_turn"
+          ? "stop"
+          : response.stop_reason === "tool_use"
+            ? "tool_use"
+            : response.stop_reason === "max_tokens"
+              ? "max_tokens"
+              : "stop",
       usage: {
         inputTokens: response.usage.input_tokens,
         outputTokens: response.usage.output_tokens,

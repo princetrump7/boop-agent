@@ -34,7 +34,13 @@ export function createWebFetchTool(logger: Logger): Tool {
       const maxLength = Math.min(Math.max(Number(args.maxLength) || 8000, 100), 50000);
 
       if (!url) {
-        return { toolName: "web_fetch", args, output: "", success: false, error: "URL is required" };
+        return {
+          toolName: "web_fetch",
+          args,
+          output: "",
+          success: false,
+          error: "URL is required",
+        };
       }
 
       try {
@@ -98,22 +104,24 @@ export function createWebFetchTool(logger: Logger): Tool {
  * Strip HTML tags and return plain text content.
  */
 function stripHtml(html: string): string {
-  return html
-    // Remove scripts
-    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
-    // Remove styles
-    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
-    // Remove HTML tags
-    .replace(/<[^>]+>/g, " ")
-    // Decode common entities
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&nbsp;/g, " ")
-    // Collapse whitespace
-    .replace(/\s+/g, " ")
-    .replace(/\n\s*\n/g, "\n")
-    .trim();
+  return (
+    html
+      // Remove scripts
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+      // Remove styles
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+      // Remove HTML tags
+      .replace(/<[^>]+>/g, " ")
+      // Decode common entities
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&nbsp;/g, " ")
+      // Collapse whitespace
+      .replace(/\s+/g, " ")
+      .replace(/\n\s*\n/g, "\n")
+      .trim()
+  );
 }

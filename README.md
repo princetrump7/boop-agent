@@ -1,71 +1,116 @@
 # Boop Agent
 
-Unified AI agent for Telegram — memory, tools, multi-LLM support, and Convex
-persistence. Built with TypeScript, Telegraf, and either Anthropic (Claude) or
-OpenAI-compatible providers (including OpenRouter).
+[![CI](https://github.com/princetrump7/boop-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/princetrump7/boop-agent/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+Unified AI agent for Telegram — tool-calling, per-chat system prompts, memory,
+multi-LLM support, and Convex persistence. Built with TypeScript, Telegraf,
+and Anthropic or OpenAI-compatible providers (including OpenRouter).
 
 ## Features
 
-- 🤖 **Agent chat** — multi-step task execution with tool-calling loops
-- 🧠 **System prompts** — change the agent's persona at runtime per chat:
-  - `/system` — view the effective system prompt
-  - `/system set <prompt>` — set a custom system prompt for this chat
-  - `/system reset` — restore the environment/default prompt
-  - Custom prompts persist across restarts when Convex is configured
-    (`settings` table), with an in-memory fallback otherwise
-- 🔍 **Web search & fetch** — Tavily, TalorData, or DuckDuckGo scraping
-- 🧠 **Memory** — read/write memory tools with a Convex-backed store
-- ✅ **Safe mode** — human-in-the-loop approvals for sensitive actions
-- 💾 **Persistence** — conversations, messages, usage, and settings in Convex
-- 🔁 **Multi-provider** — Anthropic or OpenAI/OpenRouter via `LLM_PROVIDER`
+| Capability        | Description                                                  |
+| ----------------- | ------------------------------------------------------------ |
+| 🤖 Agent chat     | Multi-step task execution with a tool-calling loop           |
+| 🧠 System prompts | Per-chat persona overrides via `/system set <prompt>`        |
+| 💾 Persistence    | Conversations, messages, usage, and settings in Convex       |
+| 🔁 Multi-provider | Anthropic or OpenAI/OpenRouter via `LLM_PROVIDER`            |
+| 🔍 Web tools      | Live search (Tavily / TalorData / DuckDuckGo) and page fetch |
+| 🧠 Memory         | `write_memory` / `recall` tools for short-term recall        |
+| ✅ Approvals      | Human-in-the-loop confirmation for sensitive actions         |
 
-## Quick Start
+## Architecture
+
+```
+Telegram ──> Telegraf bot
+              ├── auth middleware      (AUTHORIZED_USER_ID / _IDS)
+              ├── command handlers     (/start, /help, /system, ...)
+              ├── message handlers     (agent loop entry point)
+              └── agent layer
+                    ├── Orchestrator        (in-memory path)
+                    ├── InteractionAgent    (Convex-backed path)
+                    ├── providers           (Anthropic / OpenAI adapters)
+                    └── tools               (registry + web/memory/draft tools)
+
+Convex (optional) ──> settings, conversations, messages, usageRecords, ...
+```
+
+Two execution paths are supported:
+
+- **Convex-backed** — when `CONVEX_URL` is set, state (settings, system
+  prompts) persists across restarts via the Convex backend.
+- **In-memory** — without Convex, everything is ephemeral and resets on
+  restart. Per-chat system prompts fall back to an in-memory store.
+
+> Note: conversation transcripts and memories are currently held in process
+> memory in both modes. The Convex schema already includes `messages` and
+> `memoryRecords` tables ready to be wired up for full persistence.
+
+## Getting Started
+
+### Prerequisites
+
+- Node.js >= 20
+- A Telegram bot token from [@BotFather](https://t.me/BotFather)
+- An Anthropic or OpenAI API key
+
+### Install
 
 ```bash
 npm install
-cp .env.example .env   # fill in your tokens
-npm run dev            # tsx watch
+cp .env.example .env   # then fill in your tokens
+npm run dev            # starts the bot with hot reload
 ```
 
-Required environment variables:
+### Environment variables
 
-| Variable | Description |
-| --- | --- |
-| `TELEGRAM_BOT_TOKEN` | Telegram bot token from @BotFather |
-| `AUTHORIZED_USER_ID` | Your numeric Telegram ID (single-user mode) |
-| `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` | API key for the chosen provider |
-
-Optional but recommended:
-
-| Variable | Description |
-| --- | --- |
-| `CONVEX_URL` | Convex deployment URL for persistent state |
-| `CONVEX_ADMIN_KEY` | Convex admin key for the bot's HTTP client |
-| `SYSTEM_PROMPT` | Default system prompt (overrides built-in persona) |
-| `LLM_PROVIDER` | `anthropic` (default) or `openai` |
-| `TAVILY_API_KEY` / `TALORDATA_API_KEY` | Web search providers |
+| Variable                               | Required | Description                                          |
+| -------------------------------------- | -------- | ---------------------------------------------------- |
+| `TELEGRAM_BOT_TOKEN`                   | ✅       | Telegram bot token from @BotFather                   |
+| `AUTHORIZED_USER_ID`                   | ✅       | Your numeric Telegram ID (single-user mode)          |
+| `ANTHROPIC_API_KEY`                    | one of   | Anthropic API key (when `LLM_PROVIDER=anthropic`)    |
+| `OPENAI_API_KEY`                       | one of   | OpenAI / OpenRouter key (when `LLM_PROVIDER=openai`) |
+| `LLM_PROVIDER`                         | no       | `anthropic` (default) or `openai`                    |
+| `CONVEX_URL`                           | no       | Convex deployment URL for persistent state           |
+| `CONVEX_ADMIN_KEY`                     | no       | Admin key for the bot's Convex HTTP client           |
+| `SYSTEM_PROMPT`                        | no       | Default system prompt (overrides built-in persona)   |
+| `TAVILY_API_KEY` / `TALORDATA_API_KEY` | no       | Web search providers                                 |
+| `BOT_MODE`                             | no       | `polling` (default) or `webhook`                     |
 
 ## Commands
 
-| Command | Description |
-| --- | --- |
-| `/start` | Welcome message |
-| `/new` | Start a fresh conversation |
-| `/model` | Show the active provider/model |
-| `/system` | View the effective system prompt |
-| `/system set <prompt>` | Set a custom system prompt for this chat |
-| `/system reset` | Clear the custom prompt (back to env/default) |
-| `/status` | Show configuration and stats |
-| `/help` | Detailed help |
+| Command                | Description                                   |
+| ---------------------- | --------------------------------------------- |
+| `/start`               | Welcome message                               |
+| `/new`                 | Start a fresh conversation                    |
+| `/model`               | Show the active provider/model                |
+| `/system`              | View the effective system prompt              |
+| `/system set <prompt>` | Set a custom system prompt for this chat      |
+| `/system reset`        | Clear the custom prompt (back to env/default) |
+| `/status`              | Show configuration and stats                  |
+| `/help`                | Detailed usage guide                          |
+
+## Development
+
+```bash
+npm run dev          # run with hot reload
+npm run lint         # ESLint
+npm run format       # Prettier (write)
+npm run typecheck    # TypeScript type checking
+npm test             # Vitest unit tests
+npm run build        # compile to dist/
+```
+
+The CI pipeline (`.github/workflows/ci.yml`) runs lint, format check,
+typecheck, tests, and the build on Node 20 and 22 for every push and PR.
 
 ## Deployment
 
-The repo includes a `render.yaml` for Render. The service builds with
-`npm install && npm run build` and starts with `npm start` (long-polling).
+The repo includes a `render.yaml` for [Render](https://render.com). The
+service installs dependencies, builds, and starts with long-polling. Set the
+sync-false environment variables (`TELEGRAM_BOT_TOKEN`, API keys) in the
+Render dashboard.
 
-## Scripts
+## License
 
-- `npm run dev` — run with hot reload (tsx watch)
-- `npm run build` — compile TypeScript to `dist/`
-- `npm start` — run the compiled build
-- `npm run convex:dev` / `npm run convex:deploy` — Convex local/dev deploy
+[MIT](LICENSE)

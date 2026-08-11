@@ -8,10 +8,13 @@ import { ToolRegistry } from "../tools/registry.js";
 import { createWebSearchTool } from "../tools/web-search.js";
 import { createWebFetchTool } from "../tools/web-fetch.js";
 import { createDraftTools } from "../tools/drafts.js";
+import { createMemoryTools } from "../tools/memory.js";
 import { runClaudeAgent } from "../runtimes/claude.js";
 import { runOpenAIAgent } from "../runtimes/openai.js";
 import type { RuntimeRunResult } from "../runtimes/types.js";
 import type { ToolDefinition } from "../tools/types.js";
+import type { MemoryStore } from "./memory.js";
+import { InMemoryMemoryStore } from "./memory.js";
 
 /**
  * Convex-backed agent.
@@ -25,12 +28,14 @@ import type { ToolDefinition } from "../tools/types.js";
 export class InteractionAgent {
   private provider: LLMProvider;
   private toolRegistry: ToolRegistry;
+  private memory: MemoryStore;
   private logger: Logger;
   private convexUrl?: string;
 
   constructor(logger: Logger) {
     this.logger = logger.child({ component: "InteractionAgent" });
     this.toolRegistry = new ToolRegistry(this.logger);
+    this.memory = new InMemoryMemoryStore(this.logger);
     this.provider = this.createProvider();
     this.convexUrl = getEnv().CONVEX_URL || undefined;
 
@@ -69,6 +74,9 @@ export class InteractionAgent {
     for (const draftTool of createDraftTools(this.logger)) {
       this.toolRegistry.register(draftTool);
     }
+    for (const memoryTool of createMemoryTools(this.memory, this.logger)) {
+      this.toolRegistry.register(memoryTool);
+    }
     this.logger.debug(`Registered ${this.toolRegistry.size} default tools`);
   }
 
@@ -88,34 +96,44 @@ export class InteractionAgent {
     const env = getEnv();
     const effectiveSystemPrompt = systemPrompt || env.SYSTEM_PROMPT || defaultSystemPrompt();
 
-    const runtimeTools: Array<{ definition: ToolDefinition; execute(args: Record<string, unknown>): Promise<string> }> =
-      this.toolRegistry.getDefinitions().map((def) => ({
-        definition: def,
-        execute: async (args: Record<string, unknown>) => {
-          const result = await this.toolRegistry.execute(def.name, args);
-          return result.success ? result.output : `Error: ${result.error}`;
-        },
-      }));
+    const runtimeTools: Array<{
+      definition: ToolDefinition;
+      execute(args: Record<string, unknown>): Promise<string>;
+    }> = this.toolRegistry.getDefinitions().map((def) => ({
+      definition: def,
+      execute: async (args: Record<string, unknown>) => {
+        const result = await this.toolRegistry.execute(def.name, args);
+        return result.success ? result.output : `Error: ${result.error}`;
+      },
+    }));
 
     const providerType = env.LLM_PROVIDER?.toLowerCase() ?? "anthropic";
 
     if (providerType === "openai") {
-      return runOpenAIAgent(this.provider, {
+      return runOpenAIAgent(
+        this.provider,
+        {
+          systemPrompt: effectiveSystemPrompt,
+          messages: conversationHistory,
+          userMessage: message,
+          tools: runtimeTools,
+          maxToolCycles: 25,
+        },
+        this.logger,
+      );
+    }
+
+    return runClaudeAgent(
+      this.provider,
+      {
         systemPrompt: effectiveSystemPrompt,
         messages: conversationHistory,
         userMessage: message,
         tools: runtimeTools,
         maxToolCycles: 25,
-      }, this.logger);
-    }
-
-    return runClaudeAgent(this.provider, {
-      systemPrompt: effectiveSystemPrompt,
-      messages: conversationHistory,
-      userMessage: message,
-      tools: runtimeTools,
-      maxToolCycles: 25,
-    }, this.logger);
+      },
+      this.logger,
+    );
   }
 
   /**

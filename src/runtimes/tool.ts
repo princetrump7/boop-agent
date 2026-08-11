@@ -26,7 +26,13 @@ export function defineRuntimeTool(
  */
 export function runtimeToolToTool(runtimeTool: RuntimeTool): {
   definition: ToolDefinition;
-  execute(args: Record<string, unknown>): Promise<{ toolName: string; args: Record<string, unknown>; output: string; success: boolean; error?: string }>;
+  execute(args: Record<string, unknown>): Promise<{
+    toolName: string;
+    args: Record<string, unknown>;
+    output: string;
+    success: boolean;
+    error?: string;
+  }>;
 } {
   return {
     definition: runtimeTool.definition,
@@ -36,7 +42,13 @@ export function runtimeToolToTool(runtimeTool: RuntimeTool): {
         return { toolName: runtimeTool.definition.name, args, output, success: true };
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        return { toolName: runtimeTool.definition.name, args, output: "", success: false, error: message };
+        return {
+          toolName: runtimeTool.definition.name,
+          args,
+          output: "",
+          success: false,
+          error: message,
+        };
       }
     },
   };

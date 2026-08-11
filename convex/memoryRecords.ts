@@ -58,9 +58,7 @@ export const search = query({
     const limit = args.limit ?? 5;
     return await ctx.db
       .query("memoryRecords")
-      .withIndex("byEmbedding", (q) =>
-        q.eq("chatId", args.chatId)
-      )
+      .withIndex("byEmbedding", (q) => q.eq("chatId", args.chatId))
       .vectorSearch("byEmbedding", args.queryEmbedding, limit)
       .collect();
   },

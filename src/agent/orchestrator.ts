@@ -1,6 +1,6 @@
 import type { Logger } from "../config/logger.js";
 import { getEnv } from "../config/env.js";
-import type { LLMProvider, GenerateResponse } from "./providers/base.js";
+import type { LLMProvider } from "./providers/base.js";
 import { defaultSystemPrompt } from "./providers/base.js";
 import { AnthropicProvider } from "./providers/anthropic.js";
 import { OpenAIProvider } from "./providers/openai.js";
@@ -10,6 +10,7 @@ import { ToolRegistry } from "../tools/registry.js";
 import { createWebSearchTool } from "../tools/web-search.js";
 import { createWebFetchTool } from "../tools/web-fetch.js";
 import { createDraftTools } from "../tools/drafts.js";
+import { createMemoryTools } from "../tools/memory.js";
 import type { RuntimeRunResult } from "../runtimes/types.js";
 
 /**
@@ -73,6 +74,9 @@ export class Orchestrator {
     for (const draftTool of createDraftTools(this.logger)) {
       this.toolRegistry.register(draftTool);
     }
+    for (const memoryTool of createMemoryTools(this.memory, this.logger)) {
+      this.toolRegistry.register(memoryTool);
+    }
     this.logger.debug(`Registered ${this.toolRegistry.size} default tools`);
   }
 
@@ -97,7 +101,9 @@ export class Orchestrator {
     let toolCycles = 0;
     let totalInputTokens = 0;
     let totalOutputTokens = 0;
-    const toolMessages: Array<{ role: string; content: string; toolCallId?: string }> = [...history.map((m) => ({ role: m.role, content: m.content }))];
+    const toolMessages: Array<{ role: string; content: string; toolCallId?: string }> = [
+      ...history.map((m) => ({ role: m.role, content: m.content })),
+    ];
 
     const effectiveSystemPrompt = systemPrompt || getEnv().SYSTEM_PROMPT || defaultSystemPrompt();
 
@@ -129,7 +135,8 @@ export class Orchestrator {
       let assistantContent = result.content;
       for (const tc of result.toolCalls) {
         const name = tc.name;
-        const args = typeof tc.args === "string" ? JSON.parse(tc.args) as Record<string, unknown> : tc.args;
+        const args =
+          typeof tc.args === "string" ? (JSON.parse(tc.args) as Record<string, unknown>) : tc.args;
 
         this.logger.debug({ toolName: name, args }, "Executing tool");
         const toolResult = await this.toolRegistry.execute(name, args ?? {});
@@ -161,7 +168,8 @@ export class Orchestrator {
     const providerName = getEnv().LLM_PROVIDER?.toLowerCase() ?? "anthropic";
     const inputRate = providerName === "openai" ? 2.5 : 3;
     const outputRate = providerName === "openai" ? 10 : 15;
-    const estimatedCost = (totalInputTokens / 1_000_000) * inputRate + (totalOutputTokens / 1_000_000) * outputRate;
+    const estimatedCost =
+      (totalInputTokens / 1_000_000) * inputRate + (totalOutputTokens / 1_000_000) * outputRate;
 
     return {
       response,
