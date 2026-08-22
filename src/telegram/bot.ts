@@ -89,6 +89,11 @@ export function createBot(logger: Logger): BotInstance {
           { command: "status", description: "Show agent configuration" },
           { command: "help", description: "What I can read and do" },
         ]);
+        // Pin the left-of-input Menu button to always open this command
+        // list (some clients otherwise keep a stale default per chat).
+        await bot.telegram.setChatMenuButton({
+          menuButton: { type: "commands" },
+        });
         log.debug("Telegram command menu updated");
       } catch (err) {
         log.warn({ err }, "Could not set Telegram command menu");
