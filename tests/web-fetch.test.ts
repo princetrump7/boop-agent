@@ -1,6 +1,7 @@
 import * as cheerio from "cheerio";
 import { describe, expect, it } from "vitest";
 import { extractTitle, htmlToReadableText } from "../src/tools/web-fetch.js";
+import { extractYouTubeId } from "../src/tools/youtube.js";
 
 const ARTICLE_HTML = `<!doctype html>
 <html>
@@ -86,5 +87,26 @@ describe("htmlToReadableText", () => {
     );
     expect(bare.text).toContain("Real analysis content.");
     expect(bare.text).not.toContain("menu menu menu");
+  });
+});
+
+describe("extractYouTubeId", () => {
+  const cases: Array<[string, string | null]> = [
+    ["https://www.youtube.com/watch?v=dQw4w9WgXcQ", "dQw4w9WgXcQ"],
+    ["https://youtube.com/watch?v=dQw4w9WgXcQ&t=90s", "dQw4w9WgXcQ"],
+    ["https://youtu.be/dQw4w9WgXcQ", "dQw4w9WgXcQ"],
+    ["https://youtu.be/dQw4w9WgXcQ?t=30", "dQw4w9WgXcQ"],
+    ["https://www.youtube.com/shorts/abc123XYZ_-", "abc123XYZ_-"],
+    ["https://www.youtube.com/embed/dQw4w9WgXcQ", "dQw4w9WgXcQ"],
+    ["https://www.youtube.com/live/dQw4w9WgXcQ", "dQw4w9WgXcQ"],
+    ["https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ", "dQw4w9WgXcQ"],
+    ["https://m.youtube.com/watch?v=dQw4w9WgXcQ&pp=xyz", "dQw4w9WgXcQ"],
+    ["https://example.com/watch?v=dQw4w9WgXcQ", null],
+    ["https://www.youtube.com/playlist?list=PL123", null],
+    ["https://en.wikipedia.org/wiki/Ghana", null],
+  ];
+
+  it.each(cases)("parses %s → %s", (input, expected) => {
+    expect(extractYouTubeId(input)).toBe(expected);
   });
 });

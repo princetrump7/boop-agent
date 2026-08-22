@@ -1,6 +1,7 @@
 import type { Logger } from "../config/logger.js";
 import type { Tool, ToolResult } from "./types.js";
 import * as cheerio from "cheerio";
+import { extractYouTubeId, fetchYouTubeInfo, formatYouTubeOutput } from "./youtube.js";
 
 /** Hard cap on bytes we are willing to download for a single link. */
 const MAX_BYTES = 10 * 1024 * 1024;
@@ -25,7 +26,8 @@ export function createWebFetchTool(logger: Logger): Tool {
       description:
         "Read a URL and return its actual content. ALWAYS use this when the user sends a link — " +
         "never guess what a URL contains from its address alone. Works on articles, blog posts, " +
-        "documentation, PDFs, JSON endpoints, and raw text files.",
+        "documentation, PDFs, JSON endpoints, raw text files, and YouTube videos (returns title, " +
+        "channel and full caption transcript).",
       inputSchema: {
         type: "object",
         properties: {
@@ -59,6 +61,20 @@ export function createWebFetchTool(logger: Logger): Tool {
       }
       if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
         return fail("Only http:// and https:// URLs are supported");
+      }
+
+      // YouTube pages are JS shells — generic fetching only sees footer
+      // chrome. Handle video links through oEmbed + transcript instead.
+      const youtubeId = extractYouTubeId(url);
+      if (youtubeId) {
+        log.debug({ url, youtubeId }, "Handling YouTube link");
+        const info = await fetchYouTubeInfo(youtubeId, log);
+        return {
+          toolName: "web_fetch",
+          args,
+          output: formatYouTubeOutput(info, maxLength),
+          success: true,
+        };
       }
 
       try {
