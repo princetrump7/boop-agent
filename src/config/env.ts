@@ -66,6 +66,14 @@ const envSchema = z.object({
   TALORDATA_API_KEY: z.string().optional(),
   WEB_SEARCH_PROVIDER: z.enum(["tavily", "talordata", "scrape"]).default("scrape"),
 
+  // ── Web Fetch Auth (optional) ────────────────────────
+  // JSON object mapping domains to extra request headers, used to read
+  // private / login-gated links. Longest matching domain wins; a key of
+  // "example.com" also covers its subdomains. Example:
+  //   {"github.com": {"Authorization": "Bearer ghp_..."},
+  //    "news.example.com": {"Cookie": "session=..."}}
+  WEB_FETCH_HEADERS: z.string().optional(),
+
   // ── Bot Mode ────────────────────────────────────────
   BOT_MODE: z.enum(["polling", "webhook"]).default("polling"),
   PUBLIC_URL: z.string().optional(),

@@ -29,6 +29,10 @@ services:
         sync: false
       - key: WEB_SEARCH_PROVIDER
         value: talordata
+      # Optional auth headers for private/login-gated links, e.g.
+      # {"github.com": {"Authorization": "Bearer ghp_..."}}
+      - key: WEB_FETCH_HEADERS
+        sync: false
       # ── Bot Mode ──
       - key: BOT_MODE
         value: polling

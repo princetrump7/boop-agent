@@ -6,6 +6,7 @@ import { InteractionAgent } from "../agent/interaction-agent.js";
 import { createSystemPromptStore } from "../agent/system-prompt.js";
 import { authMiddleware } from "./auth.js";
 import { registerHandlers } from "./handlers.js";
+import { registerDocumentHandlers } from "./documents.js";
 import { registerCommands } from "./commands.js";
 import { registerApprovalCallbacks } from "./approvals.js";
 
@@ -58,6 +59,7 @@ export function createBot(logger: Logger): BotInstance {
 
   // Register message handlers
   registerHandlers(bot, orchestrator, interactionAgent, systemPromptStore, logger);
+  registerDocumentHandlers(bot, orchestrator, interactionAgent, systemPromptStore, logger);
 
   // Handle bot errors
   bot.catch((err, ctx) => {
@@ -74,6 +76,20 @@ export function createBot(logger: Logger): BotInstance {
         allowedUpdates: ["message", "callback_query"],
       });
       log.info("Bot started successfully");
+
+      // Keep Telegram's Menu button in sync with the registered commands.
+      try {
+        await bot.telegram.setMyCommands([
+          { command: "new", description: "Start a fresh conversation" },
+          { command: "system", description: "View or customize my persona" },
+          { command: "model", description: "Show the active AI model" },
+          { command: "status", description: "Show agent configuration" },
+          { command: "help", description: "What I can read and do" },
+        ]);
+        log.debug("Telegram command menu updated");
+      } catch (err) {
+        log.warn({ err }, "Could not set Telegram command menu");
+      }
 
       // Log bot info
       try {

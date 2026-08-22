@@ -204,6 +204,12 @@ function welcomeMessage(name: string): string {
 
 A calm, capable AI agent for Telegram — chat, research, remember, and get things done.
 
+*Things I read*
+• Any link you send — articles, PDFs, docs, JSON
+• YouTube videos — title, channel and full transcript
+• Files sent in chat — PDF / txt / md / code / JSON
+• \`mailto:\` links — I describe the draft they open
+
 *Commands*
 ${commandList([
   ["/new", "start a fresh conversation"],
@@ -221,7 +227,10 @@ Send me a message and I'll respond with AI.
 
 *Capabilities*
 • *Chat* — research, coding, writing, analysis
-• *Web* — live search and page fetching
+• *Links* — paste any URL and I read what's actually there (articles, PDFs, JSON)
+• *YouTube* — video links give me the title, channel and full caption transcript
+• *Files* — send a document (PDF / txt / md / code / JSON) and I'll read it
+• *Web* — live search for current events and facts
 • *Memory* — facts you want me to keep
 • *Approvals* — risky actions wait for your OK
 

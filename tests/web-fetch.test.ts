@@ -1,6 +1,13 @@
 import * as cheerio from "cheerio";
 import { describe, expect, it } from "vitest";
-import { extractTitle, htmlToReadableText } from "../src/tools/web-fetch.js";
+import {
+  blockedHostReason,
+  extractFromBuffer,
+  extractTitle,
+  formatMailto,
+  htmlToReadableText,
+  selectAuthHeaders,
+} from "../src/tools/web-fetch.js";
 import { extractYouTubeId } from "../src/tools/youtube.js";
 
 const ARTICLE_HTML = `<!doctype html>
@@ -108,5 +115,119 @@ describe("extractYouTubeId", () => {
 
   it.each(cases)("parses %s → %s", (input, expected) => {
     expect(extractYouTubeId(input)).toBe(expected);
+  });
+});
+
+describe("formatMailto", () => {
+  it("describes recipient and subject", () => {
+    const out = formatMailto(new URL("mailto:ada@example.com?subject=Hello%20there"));
+    expect(out).toContain("Type: email compose link");
+    expect(out).toContain("To: ada@example.com");
+    expect(out).toContain("Subject: Hello there");
+    expect(out).not.toContain("Pre-filled body");
+  });
+
+  it("handles cc, bcc, multiple recipients and a body", () => {
+    const out = formatMailto(
+      new URL("mailto:a@x.com,b@x.com?cc=c@x.com&bcc=secret@x.com&body=Line%201%0ALine%202"),
+    );
+    expect(out).toContain("To: a@x.com, b@x.com");
+    expect(out).toContain("Cc: c@x.com");
+    expect(out).toContain("Bcc: secret@x.com");
+    expect(out).toContain("Line 1\nLine 2");
+  });
+
+  it("survives a bare recipient with no query params", () => {
+    const out = formatMailto(new URL("mailto:solo@example.org"));
+    expect(out).toContain("To: solo@example.org");
+    expect(out).not.toContain("Subject:");
+  });
+});
+
+describe("blockedHostReason", () => {
+  it("blocks loopback, RFC1918, link-local and CGNAT literals", () => {
+    for (const host of [
+      "127.0.0.1",
+      "10.1.2.3",
+      "192.168.1.50",
+      "172.16.0.1",
+      "172.31.255.255",
+      "169.254.169.254",
+      "100.100.1.1",
+      "0.0.0.0",
+      "::1",
+      "[::ffff:127.0.0.1]",
+      "[fd12::1]",
+      "[fe80::1]",
+      "localhost",
+      "db.internal",
+      "nas.home.arpa",
+    ]) {
+      expect(blockedHostReason(host), `expected ${host} to be blocked`).toBeDefined();
+    }
+  });
+
+  it("allows public hosts and near-miss ranges", () => {
+    for (const host of [
+      "example.com",
+      "172.32.0.1",
+      "100.200.1.1",
+      "render.com",
+      "[2606:4700::1111]",
+    ]) {
+      expect(blockedHostReason(host), `expected ${host} to be allowed`).toBeUndefined();
+    }
+  });
+});
+
+describe("selectAuthHeaders", () => {
+  const config = {
+    "github.com": { Authorization: "Bearer ghp_abc" },
+    "news.example.com": { Cookie: "session=xyz" },
+    "example.com": { "X-Tier": "basic" },
+  };
+
+  it("matches exact domains", () => {
+    expect(selectAuthHeaders(config, "github.com")).toEqual({ Authorization: "Bearer ghp_abc" });
+  });
+
+  it("covers subdomains of the configured domain", () => {
+    expect(selectAuthHeaders(config, "api.github.com")).toEqual({
+      Authorization: "Bearer ghp_abc",
+    });
+  });
+
+  it("prefers the longest matching domain key", () => {
+    expect(selectAuthHeaders(config, "news.example.com")).toEqual({ Cookie: "session=xyz" });
+    expect(selectAuthHeaders(config, "other.example.com")).toEqual({ "X-Tier": "basic" });
+  });
+
+  it("returns nothing for unrelated hosts or malformed config", () => {
+    expect(selectAuthHeaders(config, "unrelated.org")).toEqual({});
+    expect(selectAuthHeaders(null, "github.com")).toEqual({});
+    expect(selectAuthHeaders("nope", "github.com")).toEqual({});
+  });
+});
+
+describe("extractFromBuffer", () => {
+  it("passes text buffers through by sniffing when no content-type is given", async () => {
+    const buf = new TextEncoder().encode("# Notes\n\nplain markdown body").buffer;
+    const out = await extractFromBuffer(buf, { filename: "notes.md" });
+    expect(out.kind).toBe("md file");
+    expect(out.body).toContain("plain markdown body");
+  });
+
+  it("pretty-prints JSON payloads", async () => {
+    const buf = new TextEncoder().encode('{"a":1,"b":[2,3]}').buffer;
+    const out = await extractFromBuffer(buf, { contentType: "application/json" });
+    expect(out.kind).toBe("JSON data");
+    expect(JSON.parse(out.body)).toEqual({ a: 1, b: [2, 3] });
+  });
+
+  it("reports binary media honestly instead of mangling it", async () => {
+    const buf = new Uint8Array([0x00, 0x01, 0x02, 0xff, 0xfe, 0x00]).buffer;
+    const out = await extractFromBuffer(buf, { contentType: "image/png" });
+    expect(out.note).toContain("binary media");
+    expect(out.body).toBe("");
   });
 });
