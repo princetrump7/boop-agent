@@ -15,7 +15,7 @@ and Anthropic or OpenAI-compatible providers (including OpenRouter).
 | 🧠 System prompts | Per-chat persona overrides via `/system set <prompt>`        |
 | 💾 Persistence    | Conversations, messages, usage, and settings in Convex       |
 | 🔁 Multi-provider | Anthropic or OpenAI/OpenRouter via `LLM_PROVIDER`            |
-| 🔍 Web tools      | Live search (Tavily / TalorData / DuckDuckGo) and page fetch |
+| 🔗 Link reader   | Paste any link — articles, PDFs, docs, JSON — and Boop reads what's actually there |
 | 🧠 Memory         | `write_memory` / `recall` tools for short-term recall        |
 | ✅ Approvals      | Human-in-the-loop confirmation for sensitive actions         |
 

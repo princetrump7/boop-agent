@@ -28,12 +28,14 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
+    "cheerio": "^1.2.0",
     "convex": "^1.22.0",
     "dotenv": "^16.4.0",
     "express": "^4.21.0",
     "openai": "^4.80.0",
     "pino": "^9.1.0",
     "telegraf": "^4.16.0",
+    "unpdf": "^1.8.1",
     "zod": "^3.24.0"
   },
   "devDependencies": {
