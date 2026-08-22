@@ -8,6 +8,7 @@ import { authMiddleware } from "./auth.js";
 import { registerHandlers } from "./handlers.js";
 import { registerDocumentHandlers } from "./documents.js";
 import { registerCommands } from "./commands.js";
+import { registerMenu } from "./menu.js";
 import { registerApprovalCallbacks } from "./approvals.js";
 
 /**
@@ -53,6 +54,7 @@ export function createBot(logger: Logger): BotInstance {
 
   // Register commands
   registerCommands(bot, orchestrator, systemPromptStore, logger);
+  registerMenu(bot, orchestrator, systemPromptStore, logger);
 
   // Register approval callbacks
   registerApprovalCallbacks(bot, logger);
@@ -80,6 +82,7 @@ export function createBot(logger: Logger): BotInstance {
       // Keep Telegram's Menu button in sync with the registered commands.
       try {
         await bot.telegram.setMyCommands([
+          { command: "menu", description: "Open the control panel" },
           { command: "new", description: "Start a fresh conversation" },
           { command: "system", description: "View or customize my persona" },
           { command: "model", description: "Show the active AI model" },

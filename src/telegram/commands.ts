@@ -63,7 +63,10 @@ export function registerCommands(
       ),
     ];
 
-    await sendLongMessage(ctx, `📊 *Status*\n\n${lines.join("\n")}`);
+    await sendLongMessage(
+      ctx,
+      `📊 *Status*\n\n${lines.join("\n")}\n\nOpen \`/menu\` for quick actions.`,
+    );
   });
 
   /**
@@ -200,52 +203,41 @@ function activeModel(env: EnvConfig): { provider: string; model: string } {
 }
 
 function welcomeMessage(name: string): string {
-  return `👋 *Hey ${name}, I'm Boop.*
+  return `✦ *Hey ${name}, I'm Boop.*
 
-A calm, capable AI agent for Telegram — chat, research, remember, and get things done.
+Your AI agent on Telegram. I read links before answering, watch YouTube videos so you don't have to, and read files right here in chat.
 
-*Things I read*
-• Any link you send — articles, PDFs, docs, JSON
-• YouTube videos — title, channel and full transcript
-• Files sent in chat — PDF / txt / md / code / JSON
-• \`mailto:\` links — I describe the draft they open
+*Try me now*
+🔗 Paste any link + ask me about it
+📄 Send a PDF with your question as the caption
+🔍 Ask anything current — I search live
 
-*Commands*
-${commandList([
-  ["/new", "start a fresh conversation"],
-  ["/model", "show the active model"],
-  ["/system", "view the system prompt"],
-  ["/status", "show agent configuration"],
-  ["/help", "full usage guide"],
-])}`;
+Tap ⌘ or \`/menu\` for the control panel.`;
 }
 
 function helpMessage(): string {
-  return `📖 *Boop — Usage*
+  return `✦ *Boop — Usage*
 
-Send me a message and I'll respond with AI.
+Send me a message and I'll respond. Everything else is one tap away in \`/menu\`.
 
-*Capabilities*
-• *Chat* — research, coding, writing, analysis
-• *Links* — paste any URL and I read what's actually there (articles, PDFs, JSON)
-• *YouTube* — video links give me the title, channel and full caption transcript
-• *Files* — send a document (PDF / txt / md / code / JSON) and I'll read it
-• *Web* — live search for current events and facts
-• *Memory* — facts you want me to keep
+*What I read*
+• *Links* — any URL: articles, PDFs, docs, JSON
+• *YouTube* — title, channel, full caption transcript
+• *Files* — PDF / txt / md / code / JSON sent in chat
+• *mailto:* links — I describe the draft they open
+
+*What I do*
+• *Chat & analyze* — research, writing, coding
+• *Live web search* — current events and facts
+• *Memory* — facts kept across chats
 • *Approvals* — risky actions wait for your OK
 
 *Commands*
 ${commandList([
-  ["/new", "start a fresh conversation"],
-  ["/model", "show the active model"],
-  ["/system", "view the system prompt"],
-  ["/status", "show agent configuration"],
-  ["/help", "this guide"],
-])}
-
-*System prompt*
-${commandList([
-  ["/system set <prompt>", "customize my persona"],
-  ["/system reset", "restore the default"],
+  ["/menu", "interactive control panel"],
+  ["/new", "fresh conversation"],
+  ["/system set <prompt>", "make me anyone"],
+  ["/system reset", "default persona"],
+  ["/model · /status", "config at a glance"],
 ])}`;
 }
