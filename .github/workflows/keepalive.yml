@@ -5,21 +5,20 @@ name: Keep Alive
 # awake. Telegram buffers updates for 24h, so even if a ping is delayed the
 # bot picks up missed messages on its next poll.
 #
-# Cadence note (2026-08-06): this was originally '*/5', but on a PRIVATE repo
-# each ~1-min run bills GitHub's 2000 min/mo Actions allowance — 2 repos × 288
-# runs/day would exhaust the account budget in ~3.5 days and break every other
-# scheduled workflow (incl. the trading-copilot briefs). GitHub's scheduler on
-# this account also fires hours late (observed 1.5–3.5h), so 5-min cadence
-# isn't achievable anyway. Every 2h is a budget-safe best effort. For TRUE
-# always-on, ping from outside GitHub: an external 5-min uptime monitor
-# (e.g. UptimeRobot) or a keepalive workflow in a PUBLIC repo (unlimited free
-# Actions minutes).
+# Cadence note (2026-08-23): Render suspended all free services on this account
+# on Aug 22 (~750 instance-hrs/mo shared across services). Each ping wakes an
+# instance for ~15 min, so cadence sets the burn: every 2h ≈ 93 hrs/mo/service.
+# Every 5h ≈ 39 hrs/mo/service (~78 combined with alphavision-bot) — comfortably
+# inside the pool even if bot message traffic adds extra awake time. Offset
+# from alphavision's cron (23 */5) so GitHub's late-firing scheduler (observed
+# 1.5–3.5h delays) never queues both at once. For TRUE always-on, move off the
+# free tier: paid Starter or an Oracle Always Free VM.
 #
 # If you rename the Render service / subdomain, update BOT_URL below.
 
 on:
   schedule:
-    - cron: "17 */2 * * *"
+    - cron: "47 */5 * * *"
   workflow_dispatch:
 
 jobs:
