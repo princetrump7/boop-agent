@@ -6,3 +6,6 @@ logs/
 coverage/
 .turbo/
 .eslintcache
+
+# graphify knowledge-graph output
+graphify-out/
