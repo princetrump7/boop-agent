@@ -9,6 +9,7 @@ import { InMemoryMemoryStore } from "./memory.js";
 import { ToolRegistry } from "../tools/registry.js";
 import { createWebSearchTool } from "../tools/web-search.js";
 import { createWebFetchTool } from "../tools/web-fetch.js";
+import { createWebCrawlTool } from "../tools/web-crawl.js";
 import { createDraftTools } from "../tools/drafts.js";
 import { createMemoryTools } from "../tools/memory.js";
 import type { RuntimeRunResult } from "../runtimes/types.js";
@@ -71,6 +72,7 @@ export class Orchestrator {
   private registerDefaultTools(): void {
     this.toolRegistry.register(createWebSearchTool(this.logger));
     this.toolRegistry.register(createWebFetchTool(this.logger));
+    this.toolRegistry.register(createWebCrawlTool(this.logger));
     for (const draftTool of createDraftTools(this.logger)) {
       this.toolRegistry.register(draftTool);
     }

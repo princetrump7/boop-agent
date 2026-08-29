@@ -7,6 +7,7 @@ import { OpenAIProvider } from "./providers/openai.js";
 import { ToolRegistry } from "../tools/registry.js";
 import { createWebSearchTool } from "../tools/web-search.js";
 import { createWebFetchTool } from "../tools/web-fetch.js";
+import { createWebCrawlTool } from "../tools/web-crawl.js";
 import { createDraftTools } from "../tools/drafts.js";
 import { createMemoryTools } from "../tools/memory.js";
 import { runClaudeAgent } from "../runtimes/claude.js";
@@ -71,6 +72,7 @@ export class InteractionAgent {
   private registerDefaultTools(): void {
     this.toolRegistry.register(createWebSearchTool(this.logger));
     this.toolRegistry.register(createWebFetchTool(this.logger));
+    this.toolRegistry.register(createWebCrawlTool(this.logger));
     for (const draftTool of createDraftTools(this.logger)) {
       this.toolRegistry.register(draftTool);
     }
