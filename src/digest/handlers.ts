@@ -8,6 +8,7 @@ import {
   summarizeTranscripts,
   globalBriefing,
   answerQuestion,
+  DigestLLMError,
 } from "./pipeline.js";
 import {
   collectBotApiTranscripts,
@@ -75,21 +76,9 @@ async function resolveTranscripts(
 }
 
 function buildHistoryProviderFromOrchestrator(orchestrator: Orchestrator): HistoryProvider {
-  // Mirrors Orchestrator.buildBotApiHistories but via public API (get snapshot)
-  // Use any to access private map if needed — fallback to empty
   return () => {
     try {
-      const anyO = orchestrator as unknown as { conversationHistory: Map<string, Array<{ role: string; content: string }>> };
-      const out: BotApiChatHistory[] = [];
-      for (const [convId, msgs] of (anyO.conversationHistory ?? new Map()).entries()) {
-        const [chatId] = convId.split(":");
-        out.push({
-          chatId: chatId ?? convId,
-          title: `chat ${chatId}`,
-          messages: msgs.map((m) => ({ role: m.role, content: m.content })),
-        });
-      }
-      return out;
+      return orchestrator.buildBotApiHistories();
     } catch {
       return [];
     }
@@ -155,7 +144,10 @@ export function registerDigestCommands(
       await sendLongMessage(ctx as unknown as Parameters<typeof sendLongMessage>[0], lines.join("\n"));
     } catch (err) {
       log.error({ err }, "digest failed");
-      await ctx.reply("Digest failed — check logs.").catch(() => {});
+      const friendly = err instanceof DigestLLMError
+        ? `Digest unavailable — LLM error: ${err.message.slice(0, 600)}. Retry in a moment.`
+        : err instanceof Error ? err.message.slice(0, 600) : String(err).slice(0, 600);
+      await ctx.reply(`❌ Digest failed: ${friendly}`).catch(() => {});
     }
   });
 
@@ -222,7 +214,10 @@ export function registerDigestCommands(
       }
     } catch (err) {
       log.error({ err }, "chat failed");
-      await ctx.reply("Chat summary failed.").catch(() => {});
+      const friendly = err instanceof DigestLLMError
+        ? `Chat summary unavailable — LLM error: ${err.message.slice(0, 600)}`
+        : err instanceof Error ? err.message.slice(0, 600) : String(err).slice(0, 600);
+      await ctx.reply(`❌ Chat summary failed: ${friendly}`).catch(() => {});
     }
   });
 
@@ -260,7 +255,10 @@ export function registerDigestCommands(
       await sendLongMessage(ctx as unknown as Parameters<typeof sendLongMessage>[0], answer);
     } catch (err) {
       log.error({ err }, "ask failed");
-      await ctx.reply("Ask failed.").catch(() => {});
+      const friendly = err instanceof DigestLLMError
+        ? `Ask unavailable — LLM error: ${err.message.slice(0, 600)}`
+        : err instanceof Error ? err.message.slice(0, 600) : String(err).slice(0, 600);
+      await ctx.reply(`❌ Ask failed: ${friendly}`).catch(() => {});
     }
   });
 

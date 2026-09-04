@@ -139,13 +139,16 @@ async function processWithAgent(
   const customPrompt = await systemPromptStore.get(chatId);
 
   if (interactionAgent) {
+    const history = orchestrator.getConversationHistory(chatId, userId).map((m) => ({ role: m.role, content: m.content }));
     const result = await interactionAgent.processMessage(
       chatId,
       userId,
       messageText,
-      [],
+      history,
       customPrompt ?? undefined,
     );
+    orchestrator.appendHistory(chatId, userId, "user", messageText);
+    orchestrator.appendHistory(chatId, userId, "assistant", result.response);
     await sendLongMessage(ctx, result.response);
   } else {
     const result = await orchestrator.processMessage(

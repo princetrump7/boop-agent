@@ -10,9 +10,10 @@ import { OvernightTradingService } from "./service.js";
 export function registerTradingCommands(
   bot: { command: (name: string, handler: (ctx: Context) => Promise<void>) => void },
   logger: Logger,
+  injectedService?: OvernightTradingService | null,
 ): void {
   const log = logger.child({ component: "TradingCommands" });
-  const svc = new OvernightTradingService(log);
+  const svc = injectedService ?? new OvernightTradingService(log);
 
   bot.command("portfolio", async (ctx: Context) => {
     await ctx.sendChatAction("typing").catch(() => {});

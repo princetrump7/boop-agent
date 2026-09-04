@@ -47,6 +47,16 @@ export interface DigestOptions {
 // Low-level LLM call (mirrors Python llm.aask)
 // ---------------------------------------------------------------------------
 
+export class DigestLLMError extends Error {
+  constructor(
+    message: string,
+    public readonly cause_: unknown,
+  ) {
+    super(message);
+    this.name = "DigestLLMError";
+  }
+}
+
 async function aask(
   provider: LLMProvider,
   system: string,
@@ -63,8 +73,9 @@ async function aask(
     });
     return (r.content ?? "").trim();
   } catch (err) {
-    logger?.warn({ err, system: system.slice(0, 80) }, "LLM call failed");
-    return "";
+    const msg = err instanceof Error ? err.message : String(err);
+    logger?.error({ err, system: system.slice(0, 80) }, "LLM call failed");
+    throw new DigestLLMError(`LLM unavailable — ${msg}`, err);
   }
 }
 
@@ -105,6 +116,13 @@ export async function summarizeTranscript(
 
   const valid = mapOutputs.filter((t) => t && t !== "(no useful content)");
   if (valid.length === 0) {
+    const allEmpty = mapOutputs.every((t) => !t);
+    if (allEmpty && transcript.chunks.length > 0) {
+      throw new DigestLLMError(
+        "Digest unavailable — LLM returned no content for any chunk. Check provider quota / API key and retry.",
+        null,
+      );
+    }
     return { title: transcript.title, chatId: transcript.chatId, summary: "(no useful content)" };
   }
   if (valid.length === 1) {

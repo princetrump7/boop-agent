@@ -72,7 +72,29 @@ const envSchema = z.object({
   // "example.com" also covers its subdomains. Example:
   //   {"github.com": {"Authorization": "Bearer ghp_..."},
   //    "news.example.com": {"Cookie": "session=..."}}
-  WEB_FETCH_HEADERS: z.string().optional(),
+  WEB_FETCH_HEADERS: z
+    .string()
+    .optional()
+    .refine(
+      (v) => {
+        if (!v) return true;
+        try {
+          const parsed = JSON.parse(v);
+          if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return false;
+          for (const [domain, headers] of Object.entries(parsed as Record<string, unknown>)) {
+            if (typeof domain !== "string" || !domain) return false;
+            if (typeof headers !== "object" || headers === null || Array.isArray(headers)) return false;
+            for (const [hk, hv] of Object.entries(headers as Record<string, unknown>)) {
+              if (typeof hk !== "string" || typeof hv !== "string") return false;
+            }
+          }
+          return true;
+        } catch {
+          return false;
+        }
+      },
+      { message: "WEB_FETCH_HEADERS must be JSON like {\"example.com\": {\"Authorization\": \"Bearer ...\"}} with string values" },
+    ),
 
   // ── Digest / Summarizer (from telegram-summarizer) ─────
   // Optional MTProto user session for full-dialog access (gramjs).
@@ -115,13 +137,15 @@ const envSchema = z.object({
       const s = v.toLowerCase().trim();
       return s === "1" || s === "true" || s === "yes" || s === "on";
     }),
-  DB_PATH: z.string().default("bot.db"),
+  DB_PATH: z.string().default("bot.db.json"),
   ENTRY_MAX_MINUTES_TO_CLOSE: z.coerce.number().positive().max(240).default(30),
   EXIT_MIN_MINUTES_TO_OPEN: z.coerce.number().positive().default(10),
   EXIT_MAX_MINUTES_TO_OPEN: z.coerce.number().positive().max(10080).default(4320),
 
   // ── Bot Mode ────────────────────────────────────────
-  BOT_MODE: z.enum(["polling", "webhook"]).default("polling"),
+  // Only polling is supported. Webhook enum removed to avoid silent misconfig
+  // (bot.ts previously always called bot.launch() polling regardless of value).
+  BOT_MODE: z.enum(["polling"]).default("polling"),
   PUBLIC_URL: z.string().optional(),
   WEBHOOK_SECRET: z.string().optional(),
   BOT_PORT: z.coerce.number().int().positive().default(3456),
@@ -179,17 +203,17 @@ export function resetEnvCache(): void {
 
 /**
  * Check if the current user is authorized.
- * Supports both single-user (AUTHORIZED_USER_ID) and multi-user (AUTHORIZED_USER_IDS) config.
+ * Merges AUTHORIZED_USER_ID + AUTHORIZED_USER_IDS (single acts as fallback
+ * even when the list is non-empty — previously the single was silently dropped).
  */
 export function isUserAuthorized(telegramId: number): boolean {
   const env = getEnv();
-  if (env.AUTHORIZED_USER_IDS.length > 0) {
-    return env.AUTHORIZED_USER_IDS.includes(telegramId);
-  }
-  if (env.AUTHORIZED_USER_ID !== undefined) {
-    return telegramId === env.AUTHORIZED_USER_ID;
-  }
-  return false;
+  const allow = new Set<number>([
+    ...env.AUTHORIZED_USER_IDS,
+    ...(env.AUTHORIZED_USER_ID !== undefined ? [env.AUTHORIZED_USER_ID] : []),
+  ]);
+  if (allow.size === 0) return false;
+  return allow.has(telegramId);
 }
 
 /**

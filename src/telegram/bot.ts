@@ -49,8 +49,9 @@ export function createBot(logger: Logger): BotInstance {
   // Create interaction agent if Convex is configured
   let interactionAgent: InteractionAgent | null = null;
   if (env.CONVEX_URL) {
-    interactionAgent = new InteractionAgent(logger);
-    log.info("Convex URL configured — interaction agent enabled");
+    // Provide Bot-API fallback histories from orchestrator until Convex messages are wired
+    interactionAgent = new InteractionAgent(logger, () => orchestrator.buildBotApiHistories());
+    log.info("Convex URL configured — interaction agent enabled (with orchestrator history fallback)");
   } else {
     log.info("No Convex URL — using in-memory orchestrator only");
   }
@@ -62,12 +63,19 @@ export function createBot(logger: Logger): BotInstance {
   // Apply auth middleware
   bot.use(authMiddleware(logger));
 
+  // Singleton trading service — shared by scheduler + commands to avoid
+  // concurrent read-modify-write races on the JSON store (each OvernightTradingService
+  // previously did its own file load). The store itself also has an Advisory lock
+  // as second line of defense.
+  const tradingService = hasTradingConfig() ? new OvernightTradingService(log) : null;
+  if (tradingService) log.info({ mode: tradingService.brokerInstance.modeLabel }, "Trading service initialized (singleton)");
+
   // Register commands
   registerCommands(bot, orchestrator, systemPromptStore, logger);
   registerMenu(bot, orchestrator, systemPromptStore, logger);
   // Digest + trading direct commands (bypass LLM loop)
   registerDigestCommands(bot as unknown as Parameters<typeof registerDigestCommands>[0], orchestrator, logger);
-  registerTradingCommands(bot as unknown as Parameters<typeof registerTradingCommands>[0], logger);
+  registerTradingCommands(bot as unknown as Parameters<typeof registerTradingCommands>[0], logger, tradingService);
 
   // Register approval callbacks
   registerApprovalCallbacks(bot, logger);
@@ -153,18 +161,12 @@ export function createBot(logger: Logger): BotInstance {
         }
         for (const chatId of targets) {
           try {
-            // Use raw telegram API so we don't need a Context
-            await (bot.telegram as unknown as { sendMessage: (id: number, t: string, o?: unknown) => Promise<void> }).sendMessage(
-              chatId,
-              text.slice(0, 4000),
-              { parse_mode: "Markdown" },
-            );
+            const ctxLike = { reply: (t: string) => (bot.telegram as unknown as { sendMessage: (id:number,t:string, o?: unknown)=>Promise<void>}).sendMessage(chatId, t, { parse_mode: "Markdown" }) } as unknown as Parameters<typeof sendLongMessage>[0];
+            await sendLongMessage(ctxLike, text);
           } catch (err) {
             schLog.warn({ err, chatId }, "Auto-digest send failed for chat");
-            // Fallback: try chunked plain text
             try {
-              const ctxLike = { reply: (t: string) => (bot.telegram as unknown as { sendMessage: (id:number,t:string)=>Promise<void>}).sendMessage(chatId, t) } as unknown as Parameters<typeof sendLongMessage>[0];
-              await sendLongMessage(ctxLike, text);
+              await (bot.telegram as unknown as { sendMessage: (id:number,t:string)=>Promise<void>}).sendMessage(chatId, text.slice(0, 4000));
             } catch { /* ignore */ }
           }
         }
@@ -173,11 +175,11 @@ export function createBot(logger: Logger): BotInstance {
       }
     },
     onEntries: async () => {
-      if (!hasTradingConfig()) {
+      if (!hasTradingConfig() || !tradingService) {
         log.warn("Scheduler onEntries triggered but Alpaca not configured — skipping");
         return;
       }
-      const svc = new OvernightTradingService(log);
+      const svc = tradingService;
       const notify = async (t: string) => {
         const e = getEnv();
         const targets = e.AUTHORIZED_CHAT_IDS.length > 0 ? e.AUTHORIZED_CHAT_IDS : [];
@@ -200,11 +202,11 @@ export function createBot(logger: Logger): BotInstance {
       }
     },
     onExits: async () => {
-      if (!hasTradingConfig()) {
+      if (!hasTradingConfig() || !tradingService) {
         log.warn("Scheduler onExits triggered but Alpaca not configured — skipping");
         return;
       }
-      const svc = new OvernightTradingService(log);
+      const svc = tradingService;
       const notify = async (t: string) => {
         const e = getEnv();
         const targets = e.AUTHORIZED_CHAT_IDS.length > 0 ? e.AUTHORIZED_CHAT_IDS : [];

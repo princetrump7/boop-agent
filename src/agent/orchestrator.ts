@@ -87,6 +87,20 @@ export class Orchestrator {
     return out;
   }
 
+  /** Get conversation history for a specific chat/user (for InteractionAgent fallback). */
+  public getConversationHistory(chatId: string, userId: string): Array<{ role: string; content: string }> {
+    const convId = `${chatId}:${userId}`;
+    return [...(this.conversationHistory.get(convId) ?? [])];
+  }
+
+  /** LRU cap: keep at most 200 messages per conversation, evict oldest. */
+  private capHistory(convId: string): void {
+    const h = this.conversationHistory.get(convId);
+    if (h && h.length > 200) {
+      this.conversationHistory.set(convId, h.slice(-200));
+    }
+  }
+
   /**
    * Register the default tool set available to the agent.
    */
@@ -136,6 +150,7 @@ export class Orchestrator {
 
     const history = this.conversationHistory.get(convId)!;
     history.push({ role: "user", content: message });
+    this.capHistory(convId);
 
     const maxCycles = 25;
     let toolCycles = 0;
@@ -167,6 +182,7 @@ export class Orchestrator {
       if (!result.toolCalls || result.toolCalls.length === 0) {
         toolMessages.push({ role: "assistant", content: result.content });
         history.push({ role: "assistant", content: result.content });
+        this.capHistory(convId);
         this.logger.debug({ cycle: cycle + 1, toolCalls: 0 }, "Agent finished (no tool calls)");
         break;
       }
@@ -228,6 +244,14 @@ export class Orchestrator {
     const convId = `${chatId}:${userId}`;
     this.conversationHistory.delete(convId);
     this.logger.debug({ userId, chatId }, "Conversation reset");
+  }
+
+  /** Append a turn to the in-memory history (used to mirror Convex path for Bot-API fallback). */
+  appendHistory(chatId: string, userId: string, role: string, content: string): void {
+    const convId = `${chatId}:${userId}`;
+    if (!this.conversationHistory.has(convId)) this.conversationHistory.set(convId, []);
+    this.conversationHistory.get(convId)!.push({ role, content });
+    this.capHistory(convId);
   }
 
   getMemory(): MemoryStore {

@@ -11,6 +11,11 @@ import type { RuntimeRunRequest, RuntimeRunResult } from "./types.js";
  * - Cost estimation based on token usage
  * - All conversation turns preserved in the returned message list
  */
+function isTransient(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /429|500|502|503|504|timeout|ECONNRESET|ETIMEDOUT|rate_limit/i.test(msg);
+}
+
 export async function runClaudeAgent(
   provider: LLMProvider,
   request: RuntimeRunRequest,
@@ -37,12 +42,26 @@ export async function runClaudeAgent(
       toolCallId: m.toolCallId,
     }));
 
-    const result = await provider.generate({
-      systemPrompt: request.systemPrompt,
-      messages: llmMessages,
-      tools: request.tools.length > 0 ? request.tools.map((t) => t.definition) : [],
-      maxTokens: 4096,
-    });
+    let result: Awaited<ReturnType<LLMProvider["generate"]>> | null = null;
+    let lastErr: unknown = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        result = await provider.generate({
+          systemPrompt: request.systemPrompt,
+          messages: llmMessages,
+          tools: request.tools.length > 0 ? request.tools.map((t) => t.definition) : [],
+          maxTokens: 4096,
+        });
+        break;
+      } catch (err) {
+        lastErr = err;
+        if (!isTransient(err) || attempt === 2) throw err;
+        const delay = Math.pow(2, attempt) * 1000;
+        log.warn({ attempt: attempt + 1, delay }, "Claude generate transient failure — retrying");
+        await new Promise((r) => setTimeout(r, delay));
+      }
+    }
+    if (!result) throw lastErr;
 
     totalInputTokens += result.usage?.inputTokens ?? 0;
     totalOutputTokens += result.usage?.outputTokens ?? 0;

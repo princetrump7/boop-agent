@@ -22,9 +22,28 @@ export interface ApprovalRequest {
   approved: boolean;
 }
 
-const pendingApprovals = new Map<string, ApprovalRequest>();
+const pendingApprovals = new Map<string, ApprovalRequest & { createdAt: number }>();
 
 let approvalCounter = 0;
+const APPROVAL_TTL_MS = 5 * 60 * 1000;
+let sweepTimer: ReturnType<typeof setInterval> | null = null;
+
+function ensureSweep(): void {
+  if (sweepTimer) return;
+  sweepTimer = setInterval(() => {
+    const now = Date.now();
+    for (const [id, r] of pendingApprovals) {
+      if (now - (r as { createdAt: number }).createdAt > APPROVAL_TTL_MS) pendingApprovals.delete(id);
+    }
+    if (pendingApprovals.size === 0 && sweepTimer) {
+      clearInterval(sweepTimer);
+      sweepTimer = null;
+    }
+  }, 60_000);
+  if (sweepTimer && typeof (sweepTimer as unknown as { unref?: () => void }).unref === "function") {
+    (sweepTimer as unknown as { unref: () => void }).unref();
+  }
+}
 
 /**
  * Create an approval request and send it to the chat.
@@ -39,16 +58,18 @@ export async function requestApproval(
   approvalCounter++;
   const id = `approval_${approvalCounter}_${Date.now()}`;
 
-  const request: ApprovalRequest = {
+  const request: ApprovalRequest & { createdAt: number } = {
     id,
     action,
     description,
     chatId: ctx.chat?.id ?? 0,
     resolved: false,
     approved: false,
+    createdAt: Date.now(),
   };
 
-  pendingApprovals.set(id, request);
+  pendingApprovals.set(id, request as ApprovalRequest & { createdAt: number });
+  ensureSweep();
 
   const keyboard = Markup.inlineKeyboard([
     Markup.button.callback("✅ Approve", `approve:${id}`),

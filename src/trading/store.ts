@@ -51,10 +51,12 @@ export class TradeStore {
   private filePath: string;
   private logger: Logger;
   private mem: StoreFile = { rows: [], nextId: 1 };
+  private lockPath: string;
 
   constructor(logger: Logger, filePath?: string) {
     this.logger = logger.child({ component: "TradeStore" });
     this.filePath = filePath ?? this.resolvePath();
+    this.lockPath = `${this.filePath}.lock`;
     this.load();
   }
 
@@ -84,13 +86,62 @@ export class TradeStore {
     }
   }
 
+  private acquireLock(timeoutMs = 3000): boolean {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      try {
+        const fd = fs.openSync(this.lockPath, "wx");
+        fs.writeSync(fd, String(process.pid));
+        fs.closeSync(fd);
+        return true;
+      } catch (e: unknown) {
+        const code = (e as NodeJS.ErrnoException)?.code;
+        if (code !== "EEXIST") break;
+        // stale lock older than 10s → reclaim
+        try {
+          const stat = fs.statSync(this.lockPath);
+          if (Date.now() - stat.mtimeMs > 10000) {
+            fs.unlinkSync(this.lockPath);
+            continue;
+          }
+        } catch { /* ignore */ }
+        const wait = 20 + Math.floor(Math.random() * 30);
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, wait);
+      }
+    }
+    return false;
+  }
+
+  private releaseLock(): void {
+    try { fs.unlinkSync(this.lockPath); } catch { /* ignore */ }
+  }
+
+  private withLock<T>(fn: () => T): T {
+    const locked = this.acquireLock();
+    if (!locked) this.logger.warn("TradeStore lock contention — proceeding without lock");
+    // Reload before mutating to avoid read-modify-write race
+    try { this.load(); } catch { /* ignore */ }
+    try {
+      const r = fn();
+      return r;
+    } finally {
+      if (locked) this.releaseLock();
+    }
+  }
+
   private persist(): void {
     try {
       const dir = path.dirname(this.filePath);
       if (dir && dir !== ".") fs.mkdirSync(dir, { recursive: true });
       const tmp = `${this.filePath}.tmp`;
       fs.writeFileSync(tmp, JSON.stringify(this.mem, null, 2), "utf-8");
+      try { fs.fsyncSync(fs.openSync(tmp, "r")); } catch { /* ignore fsync */ }
       fs.renameSync(tmp, this.filePath);
+      try {
+        const dirFd = fs.openSync(dir || ".", "r");
+        try { fs.fsyncSync(dirFd); } catch { /* ignore */ }
+        fs.closeSync(dirFd);
+      } catch { /* ignore dir fsync */ }
     } catch (err) {
       this.logger.error({ err, filePath: this.filePath }, "TradeStore persist failed");
     }
@@ -104,31 +155,31 @@ export class TradeStore {
 
   /** Claim an entry slot for (tradeDate, symbol). Returns true if this caller won the claim. */
   claimEntry(tradeDate: string, symbol: string, ttlSec = 900): boolean {
-    const existing = this.mem.rows.find((r) => r.tradeDate === tradeDate && r.symbol === symbol);
-    if (!existing) {
-      const now = new Date().toISOString();
-      const row: TradeRow = {
-        id: this.mem.nextId++,
-        tradeDate,
-        symbol,
-        entryStatus: "claimed",
-        claimedAt: now,
-        createdAt: now,
-        updatedAt: now,
-      };
-      this.mem.rows.push(row);
-      this.persist();
-      return true;
-    }
-    // Already claimed — allow reclaim only if stale and still in non-terminal entry
-    if (existing.entryStatus === "claimed" && this.isStale(existing, ttlSec)) {
-      existing.claimedAt = new Date().toISOString();
-      existing.updatedAt = new Date().toISOString();
-      this.persist();
-      return true;
-    }
-    // Already has a terminal/filled entry — not claimable
-    return false;
+    return this.withLock(() => {
+      const existing = this.mem.rows.find((r) => r.tradeDate === tradeDate && r.symbol === symbol);
+      if (!existing) {
+        const now = new Date().toISOString();
+        const row: TradeRow = {
+          id: this.mem.nextId++,
+          tradeDate,
+          symbol,
+          entryStatus: "claimed",
+          claimedAt: now,
+          createdAt: now,
+          updatedAt: now,
+        };
+        this.mem.rows.push(row);
+        this.persist();
+        return true;
+      }
+      if (existing.entryStatus === "claimed" && this.isStale(existing, ttlSec)) {
+        existing.claimedAt = new Date().toISOString();
+        existing.updatedAt = new Date().toISOString();
+        this.persist();
+        return true;
+      }
+      return false;
+    });
   }
 
   recordEntry(
@@ -142,24 +193,28 @@ export class TradeStore {
       entryStatus?: string;
     },
   ): void {
-    const row = this.mem.rows.find((r) => r.tradeDate === tradeDate && r.symbol === symbol);
-    if (!row) return;
-    if (fields.entryQty !== undefined) row.entryQty = fields.entryQty;
-    if (fields.entryPrice !== undefined) row.entryPrice = fields.entryPrice;
-    if (fields.entryOrderId !== undefined) row.entryOrderId = fields.entryOrderId;
-    if (fields.entryClientOrderId !== undefined) row.entryClientOrderId = fields.entryClientOrderId;
-    if (fields.entryStatus !== undefined) row.entryStatus = fields.entryStatus;
-    row.updatedAt = new Date().toISOString();
-    this.persist();
+    this.withLock(() => {
+      const row = this.mem.rows.find((r) => r.tradeDate === tradeDate && r.symbol === symbol);
+      if (!row) return;
+      if (fields.entryQty !== undefined) row.entryQty = fields.entryQty;
+      if (fields.entryPrice !== undefined) row.entryPrice = fields.entryPrice;
+      if (fields.entryOrderId !== undefined) row.entryOrderId = fields.entryOrderId;
+      if (fields.entryClientOrderId !== undefined) row.entryClientOrderId = fields.entryClientOrderId;
+      if (fields.entryStatus !== undefined) row.entryStatus = fields.entryStatus;
+      row.updatedAt = new Date().toISOString();
+      this.persist();
+    });
   }
 
   markEntryError(tradeDate: string, symbol: string, error: string): void {
-    const row = this.mem.rows.find((r) => r.tradeDate === tradeDate && r.symbol === symbol);
-    if (!row) return;
-    row.entryStatus = "error";
-    row.entryError = error;
-    row.updatedAt = new Date().toISOString();
-    this.persist();
+    this.withLock(() => {
+      const row = this.mem.rows.find((r) => r.tradeDate === tradeDate && r.symbol === symbol);
+      if (!row) return;
+      row.entryStatus = "error";
+      row.entryError = error;
+      row.updatedAt = new Date().toISOString();
+      this.persist();
+    });
   }
 
   recordExit(
@@ -174,16 +229,18 @@ export class TradeStore {
       exitError?: string | null;
     },
   ): void {
-    const row = this.mem.rows.find((r) => r.tradeDate === tradeDate && r.symbol === symbol);
-    if (!row) return;
-    if (fields.exitQty !== undefined) row.exitQty = fields.exitQty;
-    if (fields.exitPrice !== undefined) row.exitPrice = fields.exitPrice;
-    if (fields.exitOrderId !== undefined) row.exitOrderId = fields.exitOrderId;
-    if (fields.exitClientOrderId !== undefined) row.exitClientOrderId = fields.exitClientOrderId;
-    row.exitStatus = fields.exitStatus;
-    row.exitError = fields.exitError ?? null;
-    row.updatedAt = new Date().toISOString();
-    this.persist();
+    this.withLock(() => {
+      const row = this.mem.rows.find((r) => r.tradeDate === tradeDate && r.symbol === symbol);
+      if (!row) return;
+      if (fields.exitQty !== undefined) row.exitQty = fields.exitQty;
+      if (fields.exitPrice !== undefined) row.exitPrice = fields.exitPrice;
+      if (fields.exitOrderId !== undefined) row.exitOrderId = fields.exitOrderId;
+      if (fields.exitClientOrderId !== undefined) row.exitClientOrderId = fields.exitClientOrderId;
+      row.exitStatus = fields.exitStatus;
+      row.exitError = fields.exitError ?? null;
+      row.updatedAt = new Date().toISOString();
+      this.persist();
+    });
   }
 
   findByDate(tradeDate: string): TradeRow[] {

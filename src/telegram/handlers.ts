@@ -43,8 +43,10 @@ export function registerHandlers(
       const customPrompt = await systemPromptStore.get(chatId);
 
       if (interactionAgent) {
-        // Convex-backed path
-        const history: Array<{ role: string; content: string; toolCallId?: string }> = [];
+        // Convex-backed path — use orchestrator's in-memory history as fallback
+        // until Convex messages table is fully wired (schema already exists).
+        const history: Array<{ role: string; content: string; toolCallId?: string }> =
+          orchestrator.getConversationHistory(chatId, userId).map((m) => ({ role: m.role, content: m.content }));
         const result = await interactionAgent.processMessage(
           chatId,
           userId,
@@ -52,6 +54,9 @@ export function registerHandlers(
           history,
           customPrompt ?? undefined,
         );
+        // Mirror into orchestrator history so Bot-API digest fallback sees it even on Convex path
+        orchestrator.appendHistory(chatId, userId, "user", messageText);
+        orchestrator.appendHistory(chatId, userId, "assistant", result.response);
 
         // Send response
         await sendLongMessage(ctx, result.response);

@@ -52,13 +52,74 @@ async function main(): Promise<void> {
   const port = env.PORT;
   app.disable("x-powered-by");
 
-  app.get("/health", (_req, res) => {
-    res.json({
-      status: "ok",
+  app.get("/health", async (_req, res) => {
+    const checks: Record<string, { ok: boolean; latencyMs?: number; error?: string }> = {};
+    const withTimeout = async <T>(label: string, fn: () => Promise<T>, ms = 3000) => {
+      const start = Date.now();
+      try {
+        await Promise.race([
+          fn(),
+          new Promise<never>((_, rej) => setTimeout(() => rej(new Error("timeout")), ms)),
+        ]);
+        checks[label] = { ok: true, latencyMs: Date.now() - start };
+      } catch (e) {
+        checks[label] = { ok: false, latencyMs: Date.now() - start, error: e instanceof Error ? e.message.slice(0, 200) : String(e).slice(0, 200) };
+      }
+    };
+
+    await Promise.all([
+      withTimeout("telegram", async () => {
+        await botInstance.bot.telegram.getMe();
+      }, 4000),
+      ...(env.CONVEX_URL
+        ? [
+            withTimeout("convex", async () => {
+              const url = env.CONVEX_URL.replace(/\/$/, "");
+              const r = await fetch(`${url}/api/query`, { method: "GET", signal: AbortSignal.timeout(2500) }).catch(() => null);
+              if (r && !r.ok && r.status !== 404 && r.status !== 405) throw new Error(`convex http ${r.status}`);
+            }),
+          ]
+        : []),
+      ...(env.ALPACA_API_KEY && env.ALPACA_API_SECRET
+        ? [
+            withTimeout("alpaca", async () => {
+              const base = env.ALPACA_PAPER ? "https://paper-api.alpaca.markets" : "https://api.alpaca.markets";
+              const r = await fetch(`${base}/v2/clock`, {
+                headers: {
+                  "APCA-API-KEY-ID": env.ALPACA_API_KEY!,
+                  "APCA-API-SECRET-KEY": env.ALPACA_API_SECRET!,
+                },
+                signal: AbortSignal.timeout(2500),
+              });
+              if (!r.ok) throw new Error(`alpaca ${r.status}`);
+            }),
+          ]
+        : []),
+      withTimeout("llm", async () => {
+        const prov = botInstance.orchestrator.getProvider();
+        // tiny probe — 1 token max, fail fast
+        await prov.generate({
+          systemPrompt: "ping",
+          messages: [{ role: "user", content: "ping" }],
+          tools: [],
+          maxTokens: 1,
+          temperature: 0,
+        });
+      }, 6000),
+    ]);
+
+    const criticalFail = !checks["telegram"]?.ok;
+    const anyFail = Object.values(checks).some((c) => !c.ok);
+    const status = criticalFail ? "unhealthy" : anyFail ? "degraded" : "ok";
+    const code = criticalFail ? 503 : anyFail ? 200 : 200;
+
+    res.status(code).json({
+      status,
       version,
       provider: env.LLM_PROVIDER ?? "anthropic",
       convex: !!env.CONVEX_URL,
       tools: botInstance.orchestrator.getToolRegistry().size,
+      checks,
     });
   });
 
@@ -89,6 +150,16 @@ async function main(): Promise<void> {
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
 }
+
+process.on("unhandledRejection", (reason) => {
+  console.error("Unhandled rejection:", reason);
+  // Let pino flush if available; then hard exit so Render restarts
+  setTimeout(() => process.exit(1), 500).unref();
+});
+process.on("uncaughtException", (err) => {
+  console.error("Uncaught exception:", err);
+  process.exit(1);
+});
 
 main().catch((err) => {
   console.error("Fatal error:", err);

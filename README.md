@@ -79,7 +79,8 @@ npm run dev            # starts the bot with hot reload
 | `CONVEX_ADMIN_KEY`                     | no       | Admin key for the bot's Convex HTTP client           |
 | `SYSTEM_PROMPT`                        | no       | Default system prompt (overrides built-in persona)   |
 | `TAVILY_API_KEY` / `TALORDATA_API_KEY` | no       | Web search providers                                 |
-| `BOT_MODE`                             | no       | `polling` (default) or `webhook`                     |
+| `BOT_MODE`                             | no       | `polling` (only value — webhook not shipped)         |
+| `WEB_FETCH_HEADERS`                  | no       | `{"example.com":{"Authorization":"Bearer ..."}}` — per-domain headers for private links |
 
 ## Commands
 
@@ -119,7 +120,7 @@ npm run dev            # starts the bot with hot reload
 | `SYMBOLS` | no | Comma-separated watchlist (default `SPY`) |
 | `EQUITY_PER_TRADE_PCT` / `MAX_TOTAL_EXPOSURE_PCT` / `MAX_POSITIONS` | no | Position sizing + caps |
 | `DRY_RUN` | no | `true` (default) = log only; `false` = place orders |
-| `DB_PATH` / `ENTRY_MAX_MINUTES_TO_CLOSE` / `EXIT_MIN_MINUTES_TO_OPEN` / `EXIT_MAX_MINUTES_TO_OPEN` | no | Store path (JSON) + entry/exit windows |
+| `DB_PATH` / `ENTRY_MAX_MINUTES_TO_CLOSE` / `EXIT_MIN_MINUTES_TO_OPEN` / `EXIT_MAX_MINUTES_TO_OPEN` | no | Store path (JSON, default `bot.db.json`) + entry/exit windows |
 
 ## Development
 

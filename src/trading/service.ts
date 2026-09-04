@@ -27,7 +27,18 @@ function parseSymbols(raw: string): string[] {
 }
 
 function toTradeDate(d: Date): string {
-  return d.toISOString().slice(0, 10);
+  // NY trading date, not UTC — matches scheduler's America/New_York ymd
+  try {
+    const fmt = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/New_York",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
+    return fmt.format(d);
+  } catch {
+    return d.toISOString().slice(0, 10);
+  }
 }
 
 export class OvernightTradingService {

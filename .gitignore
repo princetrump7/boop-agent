@@ -15,3 +15,6 @@ SESSION_B64.txt
 *.session
 *.session-journal
 bot.db
+bot.db.json
+bot.db.json.lock
+bot.db.json.tmp

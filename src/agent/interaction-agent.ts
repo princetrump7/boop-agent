@@ -34,15 +34,21 @@ export class InteractionAgent {
   private memory: MemoryStore;
   private logger: Logger;
   private convexUrl?: string;
+  private historyProvider?: () => import("../digest/session.js").BotApiChatHistory[] | Promise<import("../digest/session.js").BotApiChatHistory[]>;
 
-  constructor(logger: Logger) {
+  constructor(logger: Logger, historyProvider?: () => import("../digest/session.js").BotApiChatHistory[] | Promise<import("../digest/session.js").BotApiChatHistory[]>) {
     this.logger = logger.child({ component: "InteractionAgent" });
     this.toolRegistry = new ToolRegistry(this.logger);
     this.memory = new InMemoryMemoryStore(this.logger);
     this.provider = this.createProvider();
     this.convexUrl = getEnv().CONVEX_URL || undefined;
+    this.historyProvider = historyProvider;
 
     this.registerDefaultTools();
+  }
+
+  setHistoryProvider(provider: () => import("../digest/session.js").BotApiChatHistory[] | Promise<import("../digest/session.js").BotApiChatHistory[]>): void {
+    this.historyProvider = provider;
   }
 
   /**
@@ -81,9 +87,9 @@ export class InteractionAgent {
     for (const memoryTool of createMemoryTools(this.memory, this.logger)) {
       this.toolRegistry.register(memoryTool);
     }
-    // Digest tools: Convex-backed histories could be supplied externally; fallback empty
+    // Digest tools: Convex-backed histories supplied via injected provider or fallback to empty
     try {
-      for (const t of createDigestTools(this.logger, undefined)) {
+      for (const t of createDigestTools(this.logger, this.historyProvider)) {
         this.toolRegistry.register(t);
       }
     } catch (err) {

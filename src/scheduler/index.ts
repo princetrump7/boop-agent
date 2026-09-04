@@ -30,29 +30,33 @@ export interface SchedulerHandle {
 }
 
 function partsInTz(d: Date, tz: string): { hour: number; minute: number; weekday: number; ymd: string } {
-  const fmt = new Intl.DateTimeFormat("en-CA", {
-    timeZone: tz,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
-  // en-CA gives YYYY-MM-DD, HH:MM
-  const parts = fmt.formatToParts(d);
-  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "0";
-  const y = get("year");
-  const m = get("month");
-  const day = get("day");
-  const hour = Number(get("hour"));
-  const minute = Number(get("minute"));
-  // weekday via separate formatter
-  const wFmt = new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "short" });
-  const wStr = wFmt.format(d);
-  const map: Record<string, number> = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 7 };
-  const weekday = map[wStr] ?? 0;
-  return { hour, minute, weekday, ymd: `${y}-${m}-${day}` };
+  try {
+    const fmt = new Intl.DateTimeFormat("en-CA", {
+      timeZone: tz,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+    const parts = fmt.formatToParts(d);
+    const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "0";
+    const y = get("year");
+    const m = get("month");
+    const day = get("day");
+    const hour = Number(get("hour"));
+    const minute = Number(get("minute"));
+    const wFmt = new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "short" });
+    const wStr = wFmt.format(d);
+    const map: Record<string, number> = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 7 };
+    const weekday = map[wStr] ?? 0;
+    return { hour, minute, weekday, ymd: `${y}-${m}-${day}` };
+  } catch (err) {
+    // Invalid TIMEZONE (e.g. typo) would otherwise crash the interval
+    // Fall back to UTC so the scheduler keeps ticking; the error is logged by tick()
+    throw new Error(`Invalid timezone "${tz}": ${err instanceof Error ? err.message : String(err)}`);
+  }
 }
 
 function isWeekday(weekday: number): boolean {
@@ -75,8 +79,15 @@ export function createScheduler(logger: Logger, callbacks: SchedulerCallbacks): 
 
     // ---- Auto-digest (Africa/Accra) ----
     if (callbacks.onAutoDigest && env.AUTO_DIGEST_HOUR !== undefined) {
-      const tz = env.TIMEZONE ?? "Africa/Accra";
-      const p = partsInTz(now, tz);
+      let p: ReturnType<typeof partsInTz>;
+      try {
+        const tz = env.TIMEZONE ?? "Africa/Accra";
+        p = partsInTz(now, tz);
+      } catch (err) {
+        log.warn({ err, tz: env.TIMEZONE }, "Invalid TIMEZONE — skipping auto-digest tick");
+        p = null as unknown as ReturnType<typeof partsInTz>;
+      }
+      if (p) {
       const targetHour = env.AUTO_DIGEST_HOUR;
       // Fire within the target hour, once per ymd, within grace window
       // Check minute window ~0-10 to coalesce early; but allow misfire 60min means any time in hour counts
@@ -95,10 +106,17 @@ export function createScheduler(logger: Logger, callbacks: SchedulerCallbacks): 
         }
       }
       // Reset guard after day rolls — implicitly via ymd change. But if we fired today, we stay guarded until tomorrow's ymd differs.
+      } // end if(p)
     }
 
     // ---- Overnight trading (America/New_York) ----
-    const ny = partsInTz(now, "America/New_York");
+    let ny: ReturnType<typeof partsInTz>;
+    try {
+      ny = partsInTz(now, "America/New_York");
+    } catch (err) {
+      log.warn({ err }, "Invalid NY timezone — skipping trading tick");
+      return;
+    }
     // Entries: 15:45 mon-fri
     if (callbacks.onEntries && isWeekday(ny.weekday)) {
       if (ny.hour === 15 && ny.minute >= 45 && ny.minute < 55 && ny.ymd !== lastEntryYmd) {

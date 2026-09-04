@@ -2,7 +2,7 @@ services:
   - type: web
     name: boop-agent
     env: node
-    buildCommand: npm install && npm run build
+    buildCommand: npm ci && npm run build
     startCommand: npm start
     healthCheckPath: /health
     envVars:
@@ -70,7 +70,7 @@ services:
       - key: DRY_RUN
         value: true
       - key: DB_PATH
-        value: bot.db
+        value: bot.db.json
       - key: ENTRY_MAX_MINUTES_TO_CLOSE
         value: 30
       - key: EXIT_MIN_MINUTES_TO_OPEN
@@ -87,6 +87,9 @@ services:
       # Optional auth headers for private/login-gated links, e.g.
       # {"github.com": {"Authorization": "Bearer ghp_..."}}
       - key: WEB_FETCH_HEADERS
+        sync: false
+      # ── Convex (optional) ──
+      - key: CONVEX_URL
         sync: false
       # ── Bot Mode ──
       - key: BOT_MODE
