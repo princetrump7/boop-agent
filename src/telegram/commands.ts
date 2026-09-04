@@ -231,6 +231,8 @@ Send me a message and I'll respond. Everything else is one tap away in \`/menu\`
 • *Live web search* — current events and facts
 • *Memory* — facts kept across chats
 • *Approvals* — risky actions wait for your OK
+• *Digest* — summarize recent Telegram chats (Bot-API or MTProto when configured)
+• *Trading* — overnight CLS/OPG paper portfolio (DRY_RUN safe by default)
 
 *Commands*
 ${commandList([
@@ -239,5 +241,11 @@ ${commandList([
   ["/system set <prompt>", "make me anyone"],
   ["/system reset", "default persona"],
   ["/model · /status", "config at a glance"],
+  ["/digest [hours]", "summarize recent chats"],
+  ["/chats · /chat <name|#> [hours]", "list / summarize one chat"],
+  ["/ask <question> [hours]", "Q&A over recent chat history"],
+  ["/join <invite link>", "join a chat (MTProto)"],
+  ["/portfolio · /watchlist · /trading", "trading status & positions"],
+  ["/run_now · /exit_now", "run overnight entries/exits now"],
 ])}`;
 }

@@ -12,6 +12,9 @@ import { createWebFetchTool } from "../tools/web-fetch.js";
 import { createWebCrawlTool } from "../tools/web-crawl.js";
 import { createDraftTools } from "../tools/drafts.js";
 import { createMemoryTools } from "../tools/memory.js";
+import { createDigestTools } from "../tools/digest.js";
+import { createTradingTools } from "../tools/trading.js";
+import type { BotApiChatHistory } from "../digest/session.js";
 import type { RuntimeRunResult } from "../runtimes/types.js";
 
 /**
@@ -67,6 +70,24 @@ export class Orchestrator {
   }
 
   /**
+   * Provide Bot-API transcripts derived from this orchestrator's in-memory
+   * conversationHistory. Used as the historyProvider for digest tools in
+   * Bot-API fallback mode (no MTProto). Public for scheduler/bot wiring.
+   */
+  public buildBotApiHistories(): BotApiChatHistory[] {
+    const out: BotApiChatHistory[] = [];
+    for (const [convId, msgs] of this.conversationHistory.entries()) {
+      const [chatId] = convId.split(":");
+      out.push({
+        chatId: chatId ?? convId,
+        title: `chat ${chatId}`,
+        messages: msgs.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
+      });
+    }
+    return out;
+  }
+
+  /**
    * Register the default tool set available to the agent.
    */
   private registerDefaultTools(): void {
@@ -78,6 +99,23 @@ export class Orchestrator {
     }
     for (const memoryTool of createMemoryTools(this.memory, this.logger)) {
       this.toolRegistry.register(memoryTool);
+    }
+    // Digest tools (MTProto preferred, Bot-API fallback via conversationHistory)
+    try {
+      const historyProvider = () => this.buildBotApiHistories();
+      for (const t of createDigestTools(this.logger, historyProvider)) {
+        this.toolRegistry.register(t);
+      }
+    } catch (err) {
+      this.logger.warn({ err }, "Failed to register digest tools");
+    }
+    // Trading tools (paper/dry-run safe even without Alpaca keys)
+    try {
+      for (const t of createTradingTools(this.logger)) {
+        this.toolRegistry.register(t);
+      }
+    } catch (err) {
+      this.logger.warn({ err }, "Failed to register trading tools");
     }
     this.logger.debug(`Registered ${this.toolRegistry.size} default tools`);
   }

@@ -74,6 +74,52 @@ const envSchema = z.object({
   //    "news.example.com": {"Cookie": "session=..."}}
   WEB_FETCH_HEADERS: z.string().optional(),
 
+  // ── Digest / Summarizer (from telegram-summarizer) ─────
+  // Optional MTProto user session for full-dialog access (gramjs).
+  // If omitted, digest uses bot-visible history only.
+  TELEGRAM_API_ID: z.coerce.number().int().positive().optional(),
+  TELEGRAM_API_HASH: z.string().optional(),
+  // Base64 of the Telethon .session file (SESSION_B64).
+  SESSION_B64: z.string().optional(),
+  // Phone number for the MTProto user session (e.g. +1234567890).
+  TELEGRAM_PHONE: z.string().optional(),
+  TELEGRAM_SESSION_NAME: z.string().default("tg_session"),
+  TIMEZONE: z.string().default("Africa/Accra"),
+  DEFAULT_HOURS: z.coerce.number().positive().default(24),
+  AUTO_DIGEST_HOUR: z.coerce.number().int().min(0).max(23).optional(),
+  MAX_CHATS: z.coerce.number().int().positive().default(25),
+  MAX_MESSAGES: z.coerce.number().int().positive().default(800),
+  CHUNK_CHARS: z.coerce.number().int().positive().default(15000),
+  MAX_MSG_CHARS: z.coerce.number().int().positive().default(280),
+
+  // ── Overnight Trading (from overnight_telegram_stock_bot) ──
+  ALPACA_API_KEY: z.string().optional(),
+  ALPACA_API_SECRET: z.string().optional(),
+  ALPACA_PAPER: z
+    .string()
+    .optional()
+    .default("true")
+    .transform((v) => {
+      const s = v.toLowerCase().trim();
+      return s === "1" || s === "true" || s === "yes" || s === "on";
+    }),
+  SYMBOLS: z.string().default("SPY"),
+  EQUITY_PER_TRADE_PCT: z.coerce.number().positive().max(100).default(10),
+  MAX_TOTAL_EXPOSURE_PCT: z.coerce.number().positive().max(100).optional(),
+  MAX_POSITIONS: z.coerce.number().int().positive().optional(),
+  DRY_RUN: z
+    .string()
+    .optional()
+    .default("true")
+    .transform((v) => {
+      const s = v.toLowerCase().trim();
+      return s === "1" || s === "true" || s === "yes" || s === "on";
+    }),
+  DB_PATH: z.string().default("bot.db"),
+  ENTRY_MAX_MINUTES_TO_CLOSE: z.coerce.number().positive().max(240).default(30),
+  EXIT_MIN_MINUTES_TO_OPEN: z.coerce.number().positive().default(10),
+  EXIT_MAX_MINUTES_TO_OPEN: z.coerce.number().positive().max(10080).default(4320),
+
   // ── Bot Mode ────────────────────────────────────────
   BOT_MODE: z.enum(["polling", "webhook"]).default("polling"),
   PUBLIC_URL: z.string().optional(),
@@ -126,6 +172,11 @@ export function getEnv(): EnvConfig {
   return cachedEnv;
 }
 
+/** For tests — reset the env cache so re-parsing picks up new values. */
+export function resetEnvCache(): void {
+  cachedEnv = null;
+}
+
 /**
  * Check if the current user is authorized.
  * Supports both single-user (AUTHORIZED_USER_ID) and multi-user (AUTHORIZED_USER_IDS) config.
@@ -156,4 +207,20 @@ export function isChatAuthorized(chatId: number): boolean {
 export function hasConvex(): boolean {
   const env = getEnv();
   return env.CONVEX_URL.length > 0;
+}
+
+/**
+ * Whether MTProto digest sidecar is configured (gramjs).
+ */
+export function hasMtprotoConfig(): boolean {
+  const env = getEnv();
+  return Boolean(env.TELEGRAM_API_ID && env.TELEGRAM_API_HASH);
+}
+
+/**
+ * Whether overnight trading (Alpaca) is configured.
+ */
+export function hasTradingConfig(): boolean {
+  const env = getEnv();
+  return Boolean(env.ALPACA_API_KEY && env.ALPACA_API_SECRET);
 }

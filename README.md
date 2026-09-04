@@ -20,6 +20,8 @@ and Anthropic or OpenAI-compatible providers (including OpenRouter).
 | 🔐 Private links | Login-gated links readable via optional per-domain auth headers (`WEB_FETCH_HEADERS`) |
 | 🧠 Memory         | `write_memory` / `recall` tools for short-term recall        |
 | ✅ Approvals      | Human-in-the-loop confirmation for sensitive actions         |
+| 🗞️ Digest         | `/digest` / `/chats` / `/chat` / `/ask` / `/join` — summarize recent chats via MTProto (GramJS) or Bot-API fallback |
+| 📈 Overnight      | Alpaca CLS (15:45) buy + OPG (19:05) ET scheduler, paper/live + DRY_RUN, JSON WAL store |
 
 ## Architecture
 
@@ -91,6 +93,33 @@ npm run dev            # starts the bot with hot reload
 | `/system reset`        | Clear the custom prompt (back to env/default) |
 | `/status`              | Show configuration and stats                  |
 | `/help`                | Detailed usage guide                          |
+| `/menu`                | Interactive control panel (Digest + Trading tabs) |
+| `/digest [hours] [filter]` | Summarize recent chats (global + per-chat) |
+| `/chats`               | List available chats                          |
+| `/chat <name|#> [hours]` | Summarize one chat                          |
+| `/ask <question> [hours]` | Q&A grounded in recent chat summaries        |
+| `/join <invite link>`  | Join a chat by invite link (MTProto only)     |
+| `/portfolio`           | Show open Alpaca positions                    |
+| `/watchlist` / `/trading` / `/status_trading` | Trading status, exposure, windows |
+| `/run_now` / `/exit_now` | Run overnight entries / exits immediately   |
+
+> **MTProto (full dialogs) is optional.** Install the peer dep with `npm i telegram` and set `TELEGRAM_API_ID` / `TELEGRAM_API_HASH` / `SESSION_B64` (base64 StringSession from Telethon/GramJS login). Without it, digest falls back to Bot-API transcripts derived from the bot's own conversation history.
+>
+> **Overnight trading is paper/DRY_RUN safe by default.** Set `ALPACA_API_KEY` / `ALPACA_API_SECRET` + `SYMBOLS`, keep `DRY_RUN=true` until ready, flip to `false` + `ALPACA_PAPER=true` for paper orders, `false` + `ALPACA_PAPER=false` for live.
+
+### Environment variables (digest + trading)
+
+| Variable | Required | Description |
+| -------- | -------- | ----------- |
+| `TELEGRAM_API_ID` / `TELEGRAM_API_HASH` / `SESSION_B64` | no | MTProto user-session (GramJS) — enables full dialog history; falls back to Bot-API when absent |
+| `TIMEZONE` | no | Auto-digest timezone (default `Africa/Accra`) |
+| `DEFAULT_HOURS` / `AUTO_DIGEST_HOUR` / `MAX_CHATS` / `MAX_MESSAGES` / `CHUNK_CHARS` / `MAX_MSG_CHARS` | no | Digest tuning (defaults 24h / unset / 25 / 800 / 15000 / 280) |
+| `ALPACA_API_KEY` / `ALPACA_API_SECRET` | no | Enables overnight trading |
+| `ALPACA_PAPER` | no | `true` (default) = paper, `false` = live |
+| `SYMBOLS` | no | Comma-separated watchlist (default `SPY`) |
+| `EQUITY_PER_TRADE_PCT` / `MAX_TOTAL_EXPOSURE_PCT` / `MAX_POSITIONS` | no | Position sizing + caps |
+| `DRY_RUN` | no | `true` (default) = log only; `false` = place orders |
+| `DB_PATH` / `ENTRY_MAX_MINUTES_TO_CLOSE` / `EXIT_MIN_MINUTES_TO_OPEN` / `EXIT_MAX_MINUTES_TO_OPEN` | no | Store path (JSON) + entry/exit windows |
 
 ## Development
 

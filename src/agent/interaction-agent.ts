@@ -10,6 +10,8 @@ import { createWebFetchTool } from "../tools/web-fetch.js";
 import { createWebCrawlTool } from "../tools/web-crawl.js";
 import { createDraftTools } from "../tools/drafts.js";
 import { createMemoryTools } from "../tools/memory.js";
+import { createDigestTools } from "../tools/digest.js";
+import { createTradingTools } from "../tools/trading.js";
 import { runClaudeAgent } from "../runtimes/claude.js";
 import { runOpenAIAgent } from "../runtimes/openai.js";
 import type { RuntimeRunResult } from "../runtimes/types.js";
@@ -78,6 +80,22 @@ export class InteractionAgent {
     }
     for (const memoryTool of createMemoryTools(this.memory, this.logger)) {
       this.toolRegistry.register(memoryTool);
+    }
+    // Digest tools: Convex-backed histories could be supplied externally; fallback empty
+    try {
+      for (const t of createDigestTools(this.logger, undefined)) {
+        this.toolRegistry.register(t);
+      }
+    } catch (err) {
+      this.logger.warn({ err }, "Failed to register digest tools (InteractionAgent)");
+    }
+    // Trading tools
+    try {
+      for (const t of createTradingTools(this.logger)) {
+        this.toolRegistry.register(t);
+      }
+    } catch (err) {
+      this.logger.warn({ err }, "Failed to register trading tools (InteractionAgent)");
     }
     this.logger.debug(`Registered ${this.toolRegistry.size} default tools`);
   }
