@@ -13,15 +13,70 @@ services:
         sync: false
       - key: AUTHORIZED_USER_ID
         sync: false
+      - key: AUTHORIZED_USER_IDS
+        sync: false
+      - key: AUTHORIZED_CHAT_IDS
+        sync: false
       # ── LLM Provider ──
       - key: LLM_PROVIDER
         value: openai
       - key: OPENAI_API_KEY
         sync: false
       - key: OPENAI_MODEL
-        value: openrouter/free
+        value: openai/gpt-oss-120b
       - key: OPENAI_BASE_URL
-        value: https://openrouter.ai/api/v1
+        value: https://api.groq.com/openai/v1
+      # Digest uses same LLM provider — no separate LLM vars needed
+      # ── Digest / MTProto (optional but wired) ──
+      - key: TELEGRAM_API_ID
+        sync: false
+      - key: TELEGRAM_API_HASH
+        sync: false
+      - key: SESSION_B64
+        sync: false
+      - key: TELEGRAM_PHONE
+        sync: false
+      - key: TELEGRAM_SESSION_NAME
+        value: tg_session
+      - key: TIMEZONE
+        value: Africa/Accra
+      - key: DEFAULT_HOURS
+        value: 24
+      - key: AUTO_DIGEST_HOUR
+        value: 8
+      - key: MAX_CHATS
+        value: 25
+      - key: MAX_MESSAGES
+        value: 800
+      - key: CHUNK_CHARS
+        value: 15000
+      - key: MAX_MSG_CHARS
+        value: 280
+      # ── Overnight Trading (paper + DRY_RUN safe) ──
+      - key: ALPACA_API_KEY
+        sync: false
+      - key: ALPACA_API_SECRET
+        sync: false
+      - key: ALPACA_PAPER
+        value: true
+      - key: SYMBOLS
+        value: SPY,QQQ,AAPL,MSFT
+      - key: EQUITY_PER_TRADE_PCT
+        value: 10
+      - key: MAX_TOTAL_EXPOSURE_PCT
+        value: 40
+      - key: MAX_POSITIONS
+        value: 4
+      - key: DRY_RUN
+        value: true
+      - key: DB_PATH
+        value: bot.db
+      - key: ENTRY_MAX_MINUTES_TO_CLOSE
+        value: 30
+      - key: EXIT_MIN_MINUTES_TO_OPEN
+        value: 10
+      - key: EXIT_MAX_MINUTES_TO_OPEN
+        value: 4320
       # ── Web Search ──
       - key: TAVILY_API_KEY
         sync: false

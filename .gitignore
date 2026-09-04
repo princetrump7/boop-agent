@@ -9,3 +9,9 @@ coverage/
 
 # graphify knowledge-graph output
 graphify-out/
+
+# MTProto session export (secret)
+SESSION_B64.txt
+*.session
+*.session-journal
+bot.db
