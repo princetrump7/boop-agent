@@ -165,16 +165,39 @@ export class Orchestrator {
     for (let cycle = 0; cycle < maxCycles; cycle++) {
       toolCycles = cycle + 1;
 
-      const result = await this.provider.generate({
-        systemPrompt: effectiveSystemPrompt,
-        messages: toolMessages.map((m) => ({
-          role: m.role as "user" | "assistant",
-          content: m.content,
-          toolCallId: m.toolCallId,
-        })),
-        tools: this.toolRegistry.getDefinitions(),
-        maxTokens: 4096,
-      });
+      let result: Awaited<ReturnType<LLMProvider["generate"]>> | null = null;
+      let lastErr: unknown = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          result = await this.provider.generate({
+            systemPrompt: effectiveSystemPrompt,
+            messages: toolMessages.map((m) => ({
+              role: m.role as "user" | "assistant",
+              content: m.content,
+              toolCallId: m.toolCallId,
+            })),
+            tools: this.toolRegistry.getDefinitions(),
+            maxTokens: 4096,
+          });
+          lastErr = null;
+          break;
+        } catch (err) {
+          lastErr = err;
+          const msg = err instanceof Error ? err.message : String(err);
+          const transient = /429|500|502|503|504|timeout|ECONNRESET|ETIMEDOUT|rate_limit|overloaded/i.test(msg);
+          if (!transient || attempt === 2) break;
+          const backoff = Math.pow(2, attempt) * 1000;
+          this.logger.warn({ attempt: attempt + 1, backoff, error: msg.slice(0, 300) }, "LLM generate retry");
+          await new Promise((r) => setTimeout(r, backoff));
+        }
+      }
+      if (!result) {
+        const msg = lastErr instanceof Error ? lastErr.message : String(lastErr);
+        const hint = /429|rate_limit/i.test(msg)
+          ? " — LLM rate limit hit (Groq 1000 req/day). The bot is still up; /portfolio and /digest still work. Retry in ~60s or switch LLM_PROVIDER/model."
+          : "";
+        throw new Error(`LLM unavailable — ${msg.slice(0, 400)}${hint}`);
+      }
 
       totalInputTokens += result.usage?.inputTokens ?? 0;
       totalOutputTokens += result.usage?.outputTokens ?? 0;

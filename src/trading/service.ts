@@ -72,13 +72,17 @@ export class OvernightTradingService {
     const trades = this.store.recent(8);
 
     const lines: string[] = [];
-    lines.push(`*Overnight Bot — ${mode}*  (${paper}, DRY_RUN=${dryRun})`);
+    const isDemo = !env.ALPACA_API_KEY || !env.ALPACA_API_SECRET;
+    lines.push(`*Overnight Bot — ${mode}*  (${paper}, DRY_RUN=${dryRun})${isDemo ? " — demo (no Alpaca keys)" : ""}`);
     lines.push(`Symbols: ${symbols.join(", ")}`);
     lines.push(`Equity/trade: ${env.EQUITY_PER_TRADE_PCT}%  ${env.MAX_TOTAL_EXPOSURE_PCT ? `Max exposure: ${env.MAX_TOTAL_EXPOSURE_PCT}%` : ""}  ${env.MAX_POSITIONS ? `Max positions: ${env.MAX_POSITIONS}` : ""}`.trim());
     if (account) {
-      lines.push(`Equity: $${Number(account.equity).toFixed(2)}  Cash: $${Number(account.cash).toFixed(2)}  Buying power: $${Number(account.buying_power).toFixed(2)}`);
+      lines.push(`Equity: $${Number(account.equity).toFixed(2)}  Cash: $${Number(account.cash).toFixed(2)}  Buying power: $${Number(account.buying_power).toFixed(2)}${isDemo ? " (demo $100k)" : ""}`);
     } else {
       lines.push(`Account: unavailable (check Alpaca keys)`);
+    }
+    if (isDemo) {
+      lines.push(`ℹ️ Set ALPACA_API_KEY/ALPACA_API_SECRET in Render env to connect a real paper account. DRY_RUN demo uses a $100k mock and $150 fallback prices — /run_now will simulate orders.`);
     }
     if (clock) {
       lines.push(`Market: ${clock.is_open ? "OPEN" : "CLOSED"}  next open ${clock.next_open}  next close ${clock.next_close}`);

@@ -101,9 +101,16 @@ export function registerHandlers(
       log.error({ err: errorMsg }, "Error processing message");
 
       try {
-        await ctx.reply("💥 *Something went wrong.* Please try again in a moment.", {
-          parse_mode: "Markdown",
-        });
+        const isRateLimit = /429|rate_limit/i.test(errorMsg);
+        const hint = isRateLimit
+          ? "Rate limit hit on Groq `openai/gpt-oss-120b` (1000 req/day). Try again in a minute — or tell me to switch the LLM to OpenRouter. Trading (/portfolio, /trading) and digest (/digest) still work."
+          : errorMsg.includes("LLM unavailable")
+            ? errorMsg.slice(0, 800)
+            : "Something went wrong. Please try again in a moment.";
+        await ctx.reply(
+          isRateLimit ? `⚠️ *LLM rate-limited*\n\n${hint}` : `💥 ${hint}`,
+          isRateLimit ? { parse_mode: "Markdown" } : undefined,
+        );
       } catch {
         // Best effort
       }

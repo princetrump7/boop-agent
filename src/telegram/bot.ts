@@ -63,12 +63,20 @@ export function createBot(logger: Logger): BotInstance {
   // Apply auth middleware
   bot.use(authMiddleware(logger));
 
-  // Singleton trading service — shared by scheduler + commands to avoid
-  // concurrent read-modify-write races on the JSON store (each OvernightTradingService
-  // previously did its own file load). The store itself also has an Advisory lock
-  // as second line of defense.
-  const tradingService = hasTradingConfig() ? new OvernightTradingService(log) : null;
-  if (tradingService) log.info({ mode: tradingService.brokerInstance.modeLabel }, "Trading service initialized (singleton)");
+  // Singleton trading service — always created so /portfolio etc. answer even in
+  // DRY_RUN demo without Alpaca keys (broker fakes account/prices in that mode).
+  // Previously this was conditional on hasTradingConfig(), so trading commands fell
+  // back to a second service instance and could look "not responding" (empty keys
+  // caused 401 + empty replies). One singleton + advisory file lock = no races.
+  const tradingService = new OvernightTradingService(log);
+  log.info(
+    {
+      mode: tradingService.brokerInstance.modeLabel,
+      hasKeys: hasTradingConfig(),
+      symbols: getEnv().SYMBOLS,
+    },
+    "Trading service initialized (singleton)",
+  );
 
   // Register commands
   registerCommands(bot, orchestrator, systemPromptStore, logger);

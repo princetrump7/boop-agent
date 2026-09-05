@@ -129,7 +129,18 @@ export class AlpacaBroker {
   // -------------------------------------------------------------------------
 
   async getAccount(): Promise<AlpacaAccount | null> {
-    if (!this.apiKey || !this.secret) return null;
+    if (!this.apiKey || !this.secret) {
+      if (this.dryRun) {
+        return {
+          id: "dry-run",
+          equity: "100000",
+          buying_power: "100000",
+          cash: "100000",
+          status: "ACTIVE",
+        };
+      }
+      return null;
+    }
     const r = await this.fetchAlpaca("/v2/account");
     if (!r.ok) {
       this.logger.warn({ status: r.status, text: r.text }, "getAccount failed");
@@ -139,6 +150,7 @@ export class AlpacaBroker {
   }
 
   async getClock(): Promise<BrokerClock | null> {
+    if (!this.apiKey || !this.secret) return null;
     const r = await this.fetchAlpaca("/v2/clock");
     if (!r.ok) {
       this.logger.warn({ status: r.status }, "getClock failed");
@@ -148,6 +160,7 @@ export class AlpacaBroker {
   }
 
   async getPositions(): Promise<AlpacaPosition[]> {
+    if (!this.apiKey || !this.secret) return [];
     const r = await this.fetchAlpaca("/v2/positions");
     if (!r.ok) {
       if (isNotFound(r.status)) return [];
@@ -158,6 +171,11 @@ export class AlpacaBroker {
   }
 
   async getLatestPrice(symbol: string): Promise<number | null> {
+    if (!this.apiKey || !this.secret) {
+      // DRY_RUN price fallback so sizing can be demoed without live keys
+      // Use ~150 as neutral placeholder; real flow would fetch IEX snapshot
+      return this.dryRun ? 150 : null;
+    }
     // IEX snapshot price via data API
     const r = await this.fetchAlpaca(`/v2/stocks/${symbol}/snapshot`, { dataHost: true });
     if (!r.ok) return null;
@@ -167,6 +185,7 @@ export class AlpacaBroker {
   }
 
   async findOrderByClientId(clientOrderId: string): Promise<AlpacaOrder | null> {
+    if (!this.apiKey || !this.secret) return null;
     const r = await this.fetchAlpaca(
       `/v2/orders?status=all&nested=false&client_order_id=${encodeURIComponent(clientOrderId)}&limit=1`,
     );
