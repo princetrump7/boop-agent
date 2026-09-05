@@ -79,12 +79,12 @@ export function createScheduler(logger: Logger, callbacks: SchedulerCallbacks): 
 
     // ---- Auto-digest (Africa/Accra) ----
     if (callbacks.onAutoDigest && env.AUTO_DIGEST_HOUR !== undefined) {
+      const tz = env.TIMEZONE ?? "Africa/Accra";
       let p: ReturnType<typeof partsInTz>;
       try {
-        const tz = env.TIMEZONE ?? "Africa/Accra";
         p = partsInTz(now, tz);
       } catch (err) {
-        log.warn({ err, tz: env.TIMEZONE }, "Invalid TIMEZONE — skipping auto-digest tick");
+        log.warn({ err, tz }, "Invalid TIMEZONE — skipping auto-digest tick");
         p = null as unknown as ReturnType<typeof partsInTz>;
       }
       if (p) {
