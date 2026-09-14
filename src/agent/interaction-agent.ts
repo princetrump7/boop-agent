@@ -12,6 +12,10 @@ import { createDraftTools } from "../tools/drafts.js";
 import { createMemoryTools } from "../tools/memory.js";
 import { createDigestTools } from "../tools/digest.js";
 import { createTradingTools } from "../tools/trading.js";
+import { createFolkHabitTools } from "../tools/folk-habits.js";
+import { createFolkMemoryTools } from "../tools/folk-memory.js";
+import { createFolkPackTools } from "../tools/folk-packs.js";
+import { getHabitStore, getMemoryGraph } from "../folk/store.js";
 import { runClaudeAgent } from "../runtimes/claude.js";
 import { runOpenAIAgent } from "../runtimes/openai.js";
 import type { RuntimeRunResult } from "../runtimes/types.js";
@@ -102,6 +106,20 @@ export class InteractionAgent {
       }
     } catch (err) {
       this.logger.warn({ err }, "Failed to register trading tools (InteractionAgent)");
+    }
+    // folk engine (shared singletons with orchestrator path)
+    try {
+      for (const t of createFolkHabitTools(getHabitStore(this.logger), this.logger)) {
+        this.toolRegistry.register(t);
+      }
+      for (const t of createFolkMemoryTools(getMemoryGraph(this.logger), this.logger)) {
+        this.toolRegistry.register(t);
+      }
+      for (const t of createFolkPackTools(getHabitStore(this.logger), getMemoryGraph(this.logger), this.logger)) {
+        this.toolRegistry.register(t);
+      }
+    } catch (err) {
+      this.logger.warn({ err }, "Failed to register folk tools (InteractionAgent)");
     }
     this.logger.debug(`Registered ${this.toolRegistry.size} default tools`);
   }

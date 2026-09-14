@@ -21,7 +21,11 @@ and Anthropic or OpenAI-compatible providers (including OpenRouter).
 | 🧠 Memory         | `write_memory` / `recall` tools for short-term recall        |
 | ✅ Approvals      | Human-in-the-loop confirmation for sensitive actions         |
 | 🗞️ Digest         | `/digest` / `/chats` / `/chat` / `/ask` / `/join` — summarize recent chats via MTProto (GramJS) or Bot-API fallback |
-| 📈 Overnight      | Alpaca CLS (15:45) buy + OPG (19:05) ET scheduler, paper/live + DRY_RUN, JSON WAL store |
+| 📈 Overnight      | Paper simulator — simulated CLS (15:45) buy + OPG (19:05) ET scheduler via Yahoo Finance (no keys), DRY_RUN/PAPER, JSON WAL store |
+| 🔥 folk habits    | Proactive accountability — the bot texts YOU first: `/habit gym Mon/Wed/Fri 07:00 relentless proof`, tones (gentle→relentless), proof-required check-ins, streaks + freezes, follow-up nudges, `/done` / `/missed` / `/streak` |
+| 🧠 Memory graph   | Persistent people/preferences/routines/goals/contacts with relations: `/remember goal marathon : under 4h`, `/recall`, `/forget` — the agent grows it every chat |
+| ☀️ Briefing       | Morning briefing + optional wind-down on schedule (`BRIEFING_HOUR`, `WIND_DOWN_HOUR`), on-demand via `/briefing` |
+| 📱 WebApp         | Telegram Mini App dashboard at `/webapp` + `/api/folk/*` — habits, streaks, memory, one-tap DONE (set `PUBLIC_URL`, open with `/boop`) |
 
 ## Architecture
 
@@ -100,13 +104,13 @@ npm run dev            # starts the bot with hot reload
 | `/chat <name|#> [hours]` | Summarize one chat                          |
 | `/ask <question> [hours]` | Q&A grounded in recent chat summaries        |
 | `/join <invite link>`  | Join a chat by invite link (MTProto only)     |
-| `/portfolio`           | Show open Alpaca positions                    |
+| `/portfolio`           | Show open paper-sim positions (Yahoo Finance, no keys needed) |
 | `/watchlist` / `/trading` / `/status_trading` | Trading status, exposure, windows |
 | `/run_now` / `/exit_now` | Run overnight entries / exits immediately   |
 
 > **MTProto (full dialogs) is optional.** Install the peer dep with `npm i telegram` and set `TELEGRAM_API_ID` / `TELEGRAM_API_HASH` / `SESSION_B64` (base64 StringSession from Telethon/GramJS login). Without it, digest falls back to Bot-API transcripts derived from the bot's own conversation history.
 >
-> **Overnight trading is paper/DRY_RUN safe by default.** Set `ALPACA_API_KEY` / `ALPACA_API_SECRET` + `SYMBOLS`, keep `DRY_RUN=true` until ready, flip to `false` + `ALPACA_PAPER=true` for paper orders, `false` + `ALPACA_PAPER=false` for live.
+> **Overnight trading is paper-simulated by default (no broker keys needed).** Prices via Yahoo Finance (no key) + optional `FINNHUB_API_KEY` fallback; mock account size via `PAPER_EQUITY` (default 100 000). Keep `DRY_RUN=true` until ready — it still simulates fills so `/run_now` works. Simulated orders use `market` + `day` at 15:45/19:05 ET and persist to `paper-broker.json`.
 
 ### Environment variables (digest + trading)
 
@@ -115,8 +119,8 @@ npm run dev            # starts the bot with hot reload
 | `TELEGRAM_API_ID` / `TELEGRAM_API_HASH` / `SESSION_B64` | no | MTProto user-session (GramJS) — enables full dialog history; falls back to Bot-API when absent |
 | `TIMEZONE` | no | Auto-digest timezone (default `Africa/Accra`) |
 | `DEFAULT_HOURS` / `AUTO_DIGEST_HOUR` / `MAX_CHATS` / `MAX_MESSAGES` / `CHUNK_CHARS` / `MAX_MSG_CHARS` | no | Digest tuning (defaults 24h / unset / 25 / 800 / 15000 / 280) |
-| `ALPACA_API_KEY` / `ALPACA_API_SECRET` | no | Enables overnight trading |
-| `ALPACA_PAPER` | no | `true` (default) = paper, `false` = live |
+| `PAPER_EQUITY` | no | Mock account equity for paper simulator (default `100000`) |
+| `FINNHUB_API_KEY` | no | Optional free-tier Finnhub fallback for prices (`https://finnhub.io`) — else Yahoo Finance + deterministic 80-400 fallback |
 | `SYMBOLS` | no | Comma-separated watchlist (default `SPY`) |
 | `EQUITY_PER_TRADE_PCT` / `MAX_TOTAL_EXPOSURE_PCT` / `MAX_POSITIONS` | no | Position sizing + caps |
 | `DRY_RUN` | no | `true` (default) = log only; `false` = place orders |

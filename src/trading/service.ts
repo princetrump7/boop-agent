@@ -9,7 +9,8 @@
  */
 import { getEnv } from "../config/env.js";
 import type { Logger } from "../config/logger.js";
-import { AlpacaBroker } from "./broker.js";
+import { PaperBroker } from "./broker.js";
+// TradierBroker/AlpacaBroker are kept as aliases in broker.ts for compat; prefer PaperBroker here
 import { TradeStore } from "./store.js";
 
 export interface ExecutionResult {
@@ -42,17 +43,17 @@ function toTradeDate(d: Date): string {
 }
 
 export class OvernightTradingService {
-  private broker: AlpacaBroker;
+  private broker: PaperBroker;
   private store: TradeStore;
   private logger: Logger;
 
-  constructor(logger: Logger, broker?: AlpacaBroker, store?: TradeStore) {
+  constructor(logger: Logger, broker?: PaperBroker, store?: TradeStore) {
     this.logger = logger.child({ component: "OvernightTradingService" });
-    this.broker = broker ?? new AlpacaBroker(this.logger);
+    this.broker = broker ?? new PaperBroker(this.logger);
     this.store = store ?? new TradeStore(this.logger);
   }
 
-  get brokerInstance(): AlpacaBroker {
+  get brokerInstance(): PaperBroker {
     return this.broker;
   }
 
@@ -65,24 +66,19 @@ export class OvernightTradingService {
     const symbols = parseSymbols(env.SYMBOLS ?? "SPY");
     const mode = this.broker.modeLabel;
     const dryRun = env.DRY_RUN ? "true" : "false";
-    const paper = env.ALPACA_PAPER ? "PAPER" : "LIVE";
     const account = await this.broker.getAccount().catch(() => null);
     const clock = await this.broker.getClock().catch(() => null);
     const positions = await this.broker.getPositions().catch(() => []);
     const trades = this.store.recent(8);
 
     const lines: string[] = [];
-    const isDemo = !env.ALPACA_API_KEY || !env.ALPACA_API_SECRET;
-    lines.push(`*Overnight Bot — ${mode}*  (${paper}, DRY_RUN=${dryRun})${isDemo ? " — demo (no Alpaca keys)" : ""}`);
+    lines.push(`*Overnight Bot — ${mode}*  (PAPER, DRY_RUN=${dryRun}) — simulated (Yahoo Finance, no keys needed)`);
     lines.push(`Symbols: ${symbols.join(", ")}`);
     lines.push(`Equity/trade: ${env.EQUITY_PER_TRADE_PCT}%  ${env.MAX_TOTAL_EXPOSURE_PCT ? `Max exposure: ${env.MAX_TOTAL_EXPOSURE_PCT}%` : ""}  ${env.MAX_POSITIONS ? `Max positions: ${env.MAX_POSITIONS}` : ""}`.trim());
     if (account) {
-      lines.push(`Equity: $${Number(account.equity).toFixed(2)}  Cash: $${Number(account.cash).toFixed(2)}  Buying power: $${Number(account.buying_power).toFixed(2)}${isDemo ? " (demo $100k)" : ""}`);
+      lines.push(`Equity: $${Number(account.equity).toFixed(2)}  Cash: $${Number(account.cash).toFixed(2)}  Buying power: $${Number(account.buying_power).toFixed(2)}`);
     } else {
-      lines.push(`Account: unavailable (check Alpaca keys)`);
-    }
-    if (isDemo) {
-      lines.push(`ℹ️ Set ALPACA_API_KEY/ALPACA_API_SECRET in Render env to connect a real paper account. DRY_RUN demo uses a $100k mock and $150 fallback prices — /run_now will simulate orders.`);
+      lines.push(`Account: unavailable (paper simulator — check PAPER_EQUITY)`);
     }
     if (clock) {
       lines.push(`Market: ${clock.is_open ? "OPEN" : "CLOSED"}  next open ${clock.next_open}  next close ${clock.next_close}`);
@@ -101,8 +97,8 @@ export class OvernightTradingService {
         lines.push(`  ${t.tradeDate} ${t.symbol} entry=${t.entryStatus}${t.entryQty ? ` qty=${t.entryQty}` : ""}  exit=${t.exitStatus ?? "-"}`);
       }
     }
-    lines.push(`Entry window: ${env.ENTRY_MAX_MINUTES_TO_CLOSE} min before close → CLS`);
-    lines.push(`Exit window: ${env.EXIT_MIN_MINUTES_TO_OPEN}–${env.EXIT_MAX_MINUTES_TO_OPEN} min after open → OPG`);
+    lines.push(`Entry window: ${env.ENTRY_MAX_MINUTES_TO_CLOSE} min before close → market/day @ 15:45 ET (simulated — Yahoo Finance)`);
+    lines.push(`Exit window: ${env.EXIT_MIN_MINUTES_TO_OPEN}–${env.EXIT_MAX_MINUTES_TO_OPEN} min after open → market/day @ 19:05 ET (simulated — Yahoo Finance)`);
     return lines.join("\n");
   }
 
@@ -121,7 +117,7 @@ export class OvernightTradingService {
 
     const account = await this.broker.getAccount();
     if (!account) {
-      const reason = "account unavailable — check ALPACA_API_KEY/SECRET";
+      const reason = "account unavailable — paper simulator not ready (check PAPER_EQUITY)";
       for (const s of symbols) result.details.push({ symbol: s, action: "buy", reason });
       result.failed = symbols.length;
       await notify?.(`Entry run skipped: ${reason}`);
@@ -193,7 +189,7 @@ export class OvernightTradingService {
           entryStatus: this.broker.isDryRun ? "dry_run" : status,
         });
         result.submitted++;
-        result.details.push({ symbol, action: "buy", qty, reason: reused ? "reused existing order" : `submitted CLS qty=${qty} @ ~$${price.toFixed(2)}` });
+        result.details.push({ symbol, action: "buy", qty, reason: reused ? "reused existing order" : `submitted market/day qty=${qty} @ ~$${price.toFixed(2)}` });
         await notify?.(`Buy ${symbol} qty=${qty} @ ~$${price.toFixed(2)} — ${reused ? "reused" : order.status}`);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -263,7 +259,7 @@ export class OvernightTradingService {
           exitStatus: this.broker.isDryRun ? "dry_run" : status,
         });
         result.submitted++;
-        result.details.push({ symbol: row.symbol, action: "sell", qty, reason: reused ? "reused existing sell" : `submitted OPG qty=${qty}` });
+        result.details.push({ symbol: row.symbol, action: "sell", qty, reason: reused ? "reused existing sell" : `submitted market/day qty=${qty}` });
         await notify?.(`Sell ${row.symbol} qty=${qty} — ${reused ? "reused" : order.status}`);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);

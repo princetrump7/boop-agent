@@ -52,15 +52,13 @@ services:
         value: 15000
       - key: MAX_MSG_CHARS
         value: 280
-      # ── Overnight Trading (paper + DRY_RUN safe) ──
-      - key: ALPACA_API_KEY
+      # ── Overnight Trading (paper simulator — no keys required) ──
+      - key: FINNHUB_API_KEY
         sync: false
-      - key: ALPACA_API_SECRET
-        sync: false
-      - key: ALPACA_PAPER
-        value: true
+      - key: PAPER_EQUITY
+        value: 100000
       - key: SYMBOLS
-        value: SPY,QQQ,AAPL,MSFT
+        value: NVDA,AMD,AVGO,TSM,ASML,MU,MRVL,AMAT,LRCX,KLAC,INTC,ARM,SNDK,STX,WDC,CEG,VST,GEV,ETN,PWR,CCJ,NEE,XOM,CVX,COP,OKLO,SMR,BE,MSFT,GOOGL,AMZN,META,AAPL,ORCL,CRM,NOW,PANW,CRWD,PLTR,SNOW,DELL,ANET,VRT,HPE,JPM,GS,MS,BAC,WFC,BLK,BX,V,MA,PYPL,COIN
       - key: EQUITY_PER_TRADE_PCT
         value: 10
       - key: MAX_TOTAL_EXPOSURE_PCT
@@ -90,6 +88,16 @@ services:
         sync: false
       # ── Convex (optional) ──
       - key: CONVEX_URL
+        sync: false
+      # ── folk engine (proactive accountability — all optional, sane defaults) ──
+      - key: BRIEFING_HOUR
+        value: 7
+      - key: FOLLOWUP_MINUTES
+        value: 120
+      - key: FOLK_DB_PATH
+        value: folk.db.json
+      # Public base URL enables the /boop WebApp dashboard button.
+      - key: PUBLIC_URL
         sync: false
       # ── Bot Mode ──
       - key: BOT_MODE

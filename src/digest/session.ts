@@ -222,6 +222,263 @@ export async function fetchMtprotoTranscripts(
 }
 
 /**
+ * True when a query looks like a direct entity identifier (not a free-form
+ * title substring). Direct queries are resolved via `client.getEntity` without
+ * scanning all dialogs — much faster for channels/groups by @username, t.me
+ * link, invite hash, or numeric id.
+ *
+ * Multi-word strings are treated as titles, not direct identifiers, so they
+ * fall through to the substring scan path.
+ */
+export function isDirectEntityQuery(raw: string): boolean {
+  const s = raw.trim();
+  if (!s) return false;
+  if (s.includes(" ")) return false;
+  if (/^-?\d+$/.test(s)) return true; // -100123... or numeric id
+  if (/^@/.test(s)) return true;
+  if (/^https?:\/\/t\.me\//i.test(s)) return true;
+  if (/^t\.me\//i.test(s)) return true;
+  if (/t\.me\/\+/.test(s) || /t\.me\/joinchat\//i.test(s)) return true;
+  // Bare invite hash without domain is not expected via /chat but treat as direct
+  return false;
+}
+
+function extractInviteHash(raw: string): string | null {
+  const m =
+    raw.match(/t\.me\/\+([A-Za-z0-9_-]+)/) ??
+    raw.match(/t\.me\/joinchat\/([A-Za-z0-9_-]+)/i);
+  return m ? m[1]! : null;
+}
+
+function extractUsernameFromLink(raw: string): string | null {
+  // Matches t.me/username or https://t.me/username (ignores invite links)
+  const m = raw.match(/(?:https?:\/\/)?t\.me\/([A-Za-z0-9_]+)(?:[\/?#]|$)/i);
+  if (!m) return null;
+  const cand = m[1]!;
+  if (cand === "+" || cand.toLowerCase() === "joinchat") return null;
+  return cand;
+}
+
+function normalizeEntityQuery(raw: string): string {
+  const s = raw.trim();
+  const invite = extractInviteHash(s);
+  if (invite) return `invite:${invite}`;
+  if (/^https?:\/\/t\.me\//i.test(s) || /^t\.me\//i.test(s)) {
+    const u = extractUsernameFromLink(s);
+    if (u) return u;
+  }
+  if (s.startsWith("@")) return s.slice(1);
+  return s;
+}
+
+export interface SingleChatFetchOptions {
+  entityQuery: string;
+  sinceUtc: Date;
+  hourWindow: number;
+  maxMessages: number;
+  logger?: Logger;
+}
+
+/**
+ * Fetch a single chat's transcript by direct entity resolution.
+ *
+ * Resolution order:
+ *  1. If query is an invite link/hash (`t.me/+...` / `joinchat/...`) — do NOT
+ *     auto-join. Return null so the caller can prompt `/join` first (silent
+ *     ImportChatInvite would join without consent and burn an invite).
+ *  2. Normalize `@username` / `t.me/username` / `https://t.me/username` /
+ *     `-100...` numeric id and try `client.getEntity` / `getInputEntity`.
+ *  3. Fallback: scan dialogs once looking for exact title/username match and
+ *     fetch that one entity only. This still avoids the full multi-transcript
+ *     fan-out of `fetchMtprotoTranscripts`.
+ *
+ * Correctly handles all Telegram entity types:
+ *  - Channel (broadcast channel): `channel.broadcast === true`
+ *  - Channel megagroup (supergroup): `channel.megagroup === true`
+ *  - Basic group Chat
+ *  - Private User
+ * `client.getMessages` works for all four; Fuel FloodWait is respected.
+ */
+export async function fetchSingleChatTranscript(
+  opts: SingleChatFetchOptions,
+): Promise<ChatTranscript | null> {
+  if (!hasMtprotoConfig()) return null;
+
+  const env = getEnv();
+  const gram = tryRequireGramJs();
+  if (!gram) return null;
+
+  let StringSession: new (s: string) => unknown;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    StringSession = require("telegram/sessions").StringSession as new (s: string) => unknown;
+  } catch {
+    opts.logger?.warn("Could not load telegram/sessions — single-chat MTProto unavailable.");
+    return null;
+  }
+
+  const normalized = normalizeEntityQuery(opts.entityQuery);
+  // Invite links must be joined first — never auto-join from a read path
+  if (normalized.startsWith("invite:")) {
+    const hash = normalized.slice("invite:".length);
+    opts.logger?.info({ hash }, "Single-chat fetch: invite link requires /join first — not auto-joining");
+    return null;
+  }
+
+  const sessionStr = getMtprotoSessionString() ?? "";
+  const session = new StringSession(sessionStr);
+  const client = new gram.TelegramClient(
+    session,
+    Number(env.TELEGRAM_API_ID),
+    String(env.TELEGRAM_API_HASH),
+    { connectionRetries: 3 },
+  );
+
+  const isNumeric = /^-?\d+$/.test(normalized);
+  const tryInputs: unknown[] = [];
+  if (isNumeric) {
+    // GramJS getEntity prefers number for ids; also try string form
+    tryInputs.push(Number(normalized));
+    tryInputs.push(normalized);
+  } else if (normalized) {
+    tryInputs.push(normalized);
+  }
+
+  try {
+    await (client as unknown as { connect: () => Promise<void> }).connect();
+    try {
+      const authorized = await (client as unknown as { isUserAuthorized: () => Promise<boolean> }).isUserAuthorized?.();
+      if (authorized === false) {
+        opts.logger?.warn("MTProto session not authorized — fill SESSION_B64; single-chat unavailable.");
+        await (client as unknown as { disconnect: () => Promise<void> }).disconnect?.();
+        return null;
+      }
+    } catch { /* best-effort */ }
+
+    let entity: unknown | null = null;
+    let resolvedMeta: { title: string; chatId: string; username?: string } | null = null;
+
+    // 1) Direct getEntity / getInputEntity
+    for (const inp of tryInputs) {
+      try {
+        const e = await (client as unknown as { getEntity: (q: unknown) => Promise<unknown> }).getEntity(inp as string);
+        if (e) { entity = e; break; }
+      } catch { /* try next */ }
+      try {
+        const e2 = await (client as unknown as { getInputEntity: (q: unknown) => Promise<unknown> }).getInputEntity(inp as string);
+        if (e2) { entity = e2; break; }
+      } catch { /* try next */ }
+    }
+
+    if (entity) {
+      const ent = entity as Record<string, unknown>;
+      const className = (ent as { className?: string })?.className ?? (ent as { constructor?: { name?: string } })?.constructor?.name ?? "unknown";
+      const title =
+        (ent as { title?: string })?.title ??
+        (ent as { firstName?: string; lastName?: string })?.firstName ??
+        String(normalized);
+      const username = (ent as { username?: string })?.username;
+      // Preserve channel/supergroup distinction in logs
+      const kind = (ent as { broadcast?: boolean })?.broadcast
+        ? "broadcast channel"
+        : (ent as { megagroup?: boolean })?.megagroup
+          ? "megagroup"
+          : className;
+      opts.logger?.debug({ query: opts.entityQuery, normalized, className, kind, title }, "Single-chat direct entity resolved");
+      resolvedMeta = {
+        title,
+        chatId: String((ent as { id?: unknown })?.id ?? normalized),
+        username,
+      };
+    } else {
+      // 2) Fallback: scan dialogs for exact title/username match, fetch only that one
+      opts.logger?.debug({ query: opts.entityQuery, normalized }, "Single-chat direct miss — scanning dialogs for exact match");
+      const dialogs = await (client as unknown as { getDialogs: (o?: unknown) => Promise<unknown[]> }).getDialogs({});
+      const qLower = normalized.toLowerCase();
+      const origLower = opts.entityQuery.trim().toLowerCase();
+      let matched: { entity: unknown; title: string; id: unknown; username?: string } | null = null;
+      for (const d of dialogs as Array<Record<string, unknown>>) {
+        const ent = (d as { entity?: Record<string, unknown> })?.entity;
+        if (!ent) continue;
+        const title = (ent as { title?: string })?.title ?? (ent as { firstName?: string })?.firstName ?? "";
+        const username = (ent as { username?: string })?.username;
+        if (
+          title.toLowerCase() === qLower ||
+          title.toLowerCase() === origLower ||
+          (username && username.toLowerCase() === qLower) ||
+          (username && `@${username.toLowerCase()}` === origLower)
+        ) {
+          matched = { entity: ent, title, id: (d as { id?: unknown })?.id, username };
+          break;
+        }
+      }
+      if (!matched) {
+        opts.logger?.info({ query: opts.entityQuery }, "Single-chat: no dialog matched exact title/username");
+        try { await (client as unknown as { disconnect: () => Promise<void> }).disconnect?.(); } catch { /* ignore */ }
+        return null;
+      }
+      entity = matched.entity;
+      resolvedMeta = { title: matched.title, chatId: String(matched.id ?? matched.title), username: matched.username };
+      opts.logger?.debug({ title: matched.title, username: matched.username }, "Single-chat dialog fallback matched");
+    }
+
+    // Fetch messages for exactly this entity
+    if (!entity || !resolvedMeta) {
+      try { await (client as unknown as { disconnect: () => Promise<void> }).disconnect?.(); } catch { /* ignore */ }
+      return null;
+    }
+
+    try {
+      const messages = await (client as unknown as {
+        getMessages: (entity: unknown, opts: unknown) => Promise<Record<string, unknown>[]>;
+      }).getMessages(entity, { limit: opts.maxMessages, reverse: false });
+
+      const digestMsgs: DigestMessage[] = [];
+      for (const m of messages as Array<Record<string, unknown>>) {
+        const dateVal = (m as { date?: Date | number })?.date;
+        const date = dateVal instanceof Date ? dateVal : dateVal ? new Date((dateVal as number) * 1000) : new Date();
+        if (date < opts.sinceUtc) continue;
+        const senderName =
+          ((m as { sender?: { firstName?: string } })?.sender?.firstName as string | undefined)
+          ?? (m as { fromId?: unknown })?.fromId ? "User" : "Unknown";
+        const text = (m as { message?: string })?.message ?? (m as { text?: string })?.text ?? "";
+        digestMsgs.push({ date, senderName, text });
+      }
+      if (digestMsgs.length === 0) {
+        opts.logger?.info({ title: resolvedMeta.title }, "Single-chat: no messages in window");
+        try { await (client as unknown as { disconnect: () => Promise<void> }).disconnect?.(); } catch { /* ignore */ }
+        return null;
+      }
+      digestMsgs.sort((a, b) => a.date.getTime() - b.date.getTime());
+      const built = buildTranscript(digestMsgs, resolvedMeta, opts.sinceUtc);
+      try { await (client as unknown as { disconnect: () => Promise<void> }).disconnect?.(); } catch { /* ignore */ }
+      return { title: built.title, chatId: built.chatId, chunks: built.chunks, messageCount: built.messageCount };
+    } catch (err) {
+      const e = err as { seconds?: number; errorMessage?: string; message?: string };
+      if (typeof e?.seconds === "number") {
+        const wait = Math.min(e.seconds + 1, 120) * 1000;
+        opts.logger?.warn({ chat: resolvedMeta.title, seconds: e.seconds }, "FloodWait on single-chat getMessages — sleeping");
+        await new Promise((r) => setTimeout(r, wait));
+      }
+      // Check for private/preview errors that mean we lack access
+      const msg = e?.errorMessage ?? e?.message ?? String(err);
+      if (/USERNAME_NOT_OCCUPIED|CHANNEL_PRIVATE|CHAT_ADMIN_REQUIRED|USER_NOT_PARTICIPANT/i.test(msg)) {
+        opts.logger?.warn({ query: opts.entityQuery, err: msg }, "Single-chat: access denied or not a participant");
+        try { await (client as unknown as { disconnect: () => Promise<void> }).disconnect?.(); } catch { /* ignore */ }
+        return null;
+      }
+      opts.logger?.warn({ chat: resolvedMeta.title, err }, "Single-chat getMessages failed");
+      try { await (client as unknown as { disconnect: () => Promise<void> }).disconnect?.(); } catch { /* ignore */ }
+      return null;
+    }
+  } catch (err) {
+    opts.logger?.warn({ err, query: opts.entityQuery }, "Single-chat fetch failed");
+    try { await (client as unknown as { disconnect: () => Promise<void> }).disconnect?.(); } catch { /* ignore */ }
+    return null;
+  }
+}
+
+/**
  * Best-effort chat listing for /chats (MTProto if available, else caller must
  * supply Bot-API chat list).
  */

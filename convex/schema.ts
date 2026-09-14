@@ -143,4 +143,65 @@ export default defineSchema({
   })
     .index("byChatIdStatus", ["chatId", "status"])
     .index("byTurnId", ["turnId"]),
+
+  // ── folk engine (proactive accountability — mirrors folk.db.json) ──
+  habits: defineTable({
+    habitId: v.string(),
+    chatId: v.number(),
+    telegramId: v.optional(v.number()),
+    name: v.string(),
+    days: v.array(v.number()),
+    times: v.array(v.string()),
+    tone: v.string(), // "gentle" | "steady" | "firm" | "relentless"
+    proofRequired: v.boolean(),
+    paused: v.boolean(),
+    streak: v.number(),
+    longestStreak: v.number(),
+    freezes: v.number(),
+    lastCheckinDate: v.optional(v.string()),
+    totalCheckins: v.number(),
+    totalMisses: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("byChatId", ["chatId"])
+    .index("byHabitId", ["habitId"]),
+
+  habitCheckins: defineTable({
+    checkinId: v.string(),
+    habitId: v.string(),
+    chatId: v.number(),
+    date: v.string(),
+    scheduledTime: v.string(),
+    status: v.string(), // "pending" | "done" | "missed" | "skipped"
+    proof: v.optional(v.string()),
+    sentAt: v.number(),
+    respondedAt: v.optional(v.number()),
+    followups: v.number(),
+  })
+    .index("byChatId", ["chatId"])
+    .index("byHabitId", ["habitId"]),
+
+  memoryNodes: defineTable({
+    nodeId: v.string(),
+    chatId: v.number(),
+    kind: v.string(), // "person" | "preference" | "routine" | "goal" | "contact" | "fact"
+    label: v.string(),
+    detail: v.string(),
+    importance: v.number(),
+    accessCount: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("byChatId", ["chatId"])
+    .index("byNodeId", ["nodeId"]),
+
+  memoryEdges: defineTable({
+    edgeId: v.string(),
+    chatId: v.number(),
+    fromId: v.string(),
+    toId: v.string(),
+    relation: v.string(),
+    createdAt: v.number(),
+  }).index("byChatId", ["chatId"]),
 });

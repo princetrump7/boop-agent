@@ -4,7 +4,8 @@
  * No external cron dep. Uses setInterval + Intl.DateTimeFormat timezone math
  * to emulate:
  *  - telegram-summarizer app.py AUTO_DIGEST_HOUR (Africa/Accra daily)
- *  - overnight_telegram_stock_bot app.py 15:45 CLS / 19:05 OPG America/New_York mon-fri
+ *  - overnight paper simulator 15:45 buy / 19:05 sell America/New_York mon-fri
+ *    (simulated CLS/OPG via market/day @ 15:45/19:05; Yahoo Finance prices, no keys needed)
  *    with misfire_grace_time 3600 and coalesce (at most once per trading day).
  *
  * Exposed API:
@@ -20,6 +21,8 @@ export interface SchedulerCallbacks {
   onAutoDigest?: () => Promise<void>;
   onEntries?: () => Promise<void>;
   onExits?: () => Promise<void>;
+  /** folk engine — proactive check-ins, follow-ups, briefings. Fires every tick (~60s). */
+  onFolkTick?: (now: Date) => Promise<void>;
 }
 
 export interface SchedulerHandle {
@@ -76,6 +79,15 @@ export function createScheduler(logger: Logger, callbacks: SchedulerCallbacks): 
 
   async function tick(now: Date): Promise<void> {
     const env = getEnv();
+
+    // ---- folk proactive tick (check-ins / follow-ups / briefings) ----
+    if (callbacks.onFolkTick) {
+      try {
+        await callbacks.onFolkTick(now);
+      } catch (err) {
+        log.warn({ err }, "onFolkTick failed");
+      }
+    }
 
     // ---- Auto-digest (Africa/Accra) ----
     if (callbacks.onAutoDigest && env.AUTO_DIGEST_HOUR !== undefined) {
@@ -143,8 +155,7 @@ export function createScheduler(logger: Logger, callbacks: SchedulerCallbacks): 
         }
       }
     }
-    // Exits: 19:05 mon-fri (the spec says 09:30 window; using 19:05 per user ask — but original bot uses ~9:30 ET; keep 19:05 as requested? Actually run at next-day open window.)
-    // The user's spec: "Alpaca 15:45 CLS buy, 19:05 OPG sell America/New_York" — honor 19:05.
+    // Exits: 19:05 mon-fri (paper simulator — simulated OPG sell via market/day @ 19:05 ET).
     // Also allow misfire grace 60 min.
     if (callbacks.onExits && isWeekday(ny.weekday)) {
       if (ny.hour === 19 && ny.minute >= 5 && ny.minute < 15 && ny.ymd !== lastExitYmd) {

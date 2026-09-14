@@ -1,5 +1,5 @@
 import { Telegraf } from "telegraf";
-import { getEnv, hasMtprotoConfig, hasTradingConfig } from "../config/env.js";
+import { getEnv, hasMtprotoConfig } from "../config/env.js";
 import type { Logger } from "../config/logger.js";
 import { Orchestrator } from "../agent/orchestrator.js";
 import { InteractionAgent } from "../agent/interaction-agent.js";
@@ -12,6 +12,8 @@ import { registerMenu } from "./menu.js";
 import { registerApprovalCallbacks } from "./approvals.js";
 import { registerDigestCommands } from "../digest/handlers.js";
 import { registerTradingCommands } from "../trading/commands.js";
+import { registerFolkCommands, runFolkTick } from "./folk.js";
+import { getHabitStore, getMemoryGraph } from "../folk/store.js";
 import { createScheduler, type SchedulerHandle } from "../scheduler/index.js";
 import { createLLMProviderFromEnv } from "../agent/providers/factory.js";
 import { summarizeTranscripts, globalBriefing } from "../digest/pipeline.js";
@@ -63,24 +65,34 @@ export function createBot(logger: Logger): BotInstance {
   // Apply auth middleware
   bot.use(authMiddleware(logger));
 
-  // Singleton trading service — always created so /portfolio etc. answer even in
-  // DRY_RUN demo without Alpaca keys (broker fakes account/prices in that mode).
-  // Previously this was conditional on hasTradingConfig(), so trading commands fell
-  // back to a second service instance and could look "not responding" (empty keys
-  // caused 401 + empty replies). One singleton + advisory file lock = no races.
+  // Singleton trading service — always created (paper simulator, Yahoo Finance, no keys needed).
+  // Uses PAPER_EQUITY + deterministic fallback when Yahoo/FINNHUB unavailable.
   const tradingService = new OvernightTradingService(log);
   log.info(
     {
       mode: tradingService.brokerInstance.modeLabel,
-      hasKeys: hasTradingConfig(),
+      dryRun: getEnv().DRY_RUN,
       symbols: getEnv().SYMBOLS,
     },
-    "Trading service initialized (singleton)",
+    "Trading service initialized (singleton — paper simulator)",
   );
 
   // Register commands
   registerCommands(bot, orchestrator, systemPromptStore, logger);
   registerMenu(bot, orchestrator, systemPromptStore, logger);
+  // folk engine — proactive accountability (habits, streaks, briefing, memory, WebApp)
+  const habitStore = getHabitStore(logger);
+  const memoryGraph = getMemoryGraph(logger);
+  registerFolkCommands(
+    bot as unknown as Parameters<typeof registerFolkCommands>[0],
+    habitStore,
+    memoryGraph,
+    logger,
+  );
+  log.info(
+    { habits: habitStore.export().habits.length },
+    "folk engine initialized (habits + memory graph + WebApp)",
+  );
   // Digest + trading direct commands (bypass LLM loop)
   registerDigestCommands(bot as unknown as Parameters<typeof registerDigestCommands>[0], orchestrator, logger);
   registerTradingCommands(bot as unknown as Parameters<typeof registerTradingCommands>[0], logger, tradingService);
@@ -99,6 +111,16 @@ export function createBot(logger: Logger): BotInstance {
 
   // ── Scheduler (auto-digest + overnight trading) ────────────────────────
   const scheduler: SchedulerHandle = createScheduler(logger, {
+    onFolkTick: async (now: Date) => {
+      const send = async (chatId: string, text: string) => {
+        await (bot.telegram as unknown as { sendMessage: (id: string | number, t: string, o?: unknown) => Promise<void> }).sendMessage(
+          chatId,
+          text,
+          { parse_mode: "Markdown" },
+        );
+      };
+      await runFolkTick(now, { habits: habitStore, memory: memoryGraph, send, logger: log });
+    },
     onAutoDigest: async () => {
       const e = getEnv();
       const hours = e.DEFAULT_HOURS ?? 24;
@@ -183,8 +205,8 @@ export function createBot(logger: Logger): BotInstance {
       }
     },
     onEntries: async () => {
-      if (!hasTradingConfig() || !tradingService) {
-        log.warn("Scheduler onEntries triggered but Alpaca not configured — skipping");
+      if (!tradingService) {
+        log.warn("Scheduler onEntries triggered but trading service not ready — skipping");
         return;
       }
       const svc = tradingService;
@@ -210,8 +232,8 @@ export function createBot(logger: Logger): BotInstance {
       }
     },
     onExits: async () => {
-      if (!hasTradingConfig() || !tradingService) {
-        log.warn("Scheduler onExits triggered but Alpaca not configured — skipping");
+      if (!tradingService) {
+        log.warn("Scheduler onExits triggered but trading service not ready — skipping");
         return;
       }
       const svc = tradingService;
@@ -254,6 +276,15 @@ export function createBot(logger: Logger): BotInstance {
       try {
         await bot.telegram.setMyCommands([
           { command: "menu", description: "Open the control panel" },
+          { command: "boop", description: "📱 Open the dashboard (WebApp)" },
+          { command: "packs", description: "🛍️ Hire a mini-folk" },
+          { command: "hire", description: "Hire a pack by id" },
+          { command: "habit", description: "🎯 New habit — I text you first" },
+          { command: "habits", description: "List your habits" },
+          { command: "done", description: "Log a habit done" },
+          { command: "streak", description: "🔥 Streaks + score" },
+          { command: "briefing", description: "☀️ Morning briefing now" },
+          { command: "recall", description: "🧠 What I remember" },
           { command: "new", description: "Start a fresh conversation" },
           { command: "system", description: "View or customize my persona" },
           { command: "model", description: "Show the active AI model" },
@@ -262,6 +293,7 @@ export function createBot(logger: Logger): BotInstance {
           { command: "digest", description: "Summarize recent chats" },
           { command: "chats", description: "List available chats" },
           { command: "chat", description: "Summarize one chat" },
+          { command: "read", description: "Read a single channel/group (direct @/link/id)" },
           { command: "ask", description: "Ask about recent chats" },
           { command: "join", description: "Join a chat by invite link (MTProto)" },
           { command: "portfolio", description: "Show open positions" },

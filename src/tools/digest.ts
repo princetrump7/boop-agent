@@ -3,7 +3,12 @@ import type { Tool, ToolResult } from "./types.js";
 import { getEnv, hasMtprotoConfig } from "../config/env.js";
 import { createLLMProviderFromEnv } from "../agent/providers/factory.js";
 import { globalBriefing, summarizeTranscripts, answerQuestion } from "../digest/pipeline.js";
-import { collectBotApiTranscripts, fetchMtprotoTranscripts } from "../digest/session.js";
+import {
+  collectBotApiTranscripts,
+  fetchMtprotoTranscripts,
+  fetchSingleChatTranscript,
+  isDirectEntityQuery,
+} from "../digest/session.js";
 import type { ChatTranscript } from "../digest/pipeline.js";
 import type { BotApiChatHistory } from "../digest/session.js";
 
@@ -43,7 +48,50 @@ async function resolveTranscripts(
   const maxMessages = env.MAX_MESSAGES ?? 800;
   const maxChats = env.MAX_CHATS ?? 25;
 
-  // Try MTProto first if configured
+  // Fast path — direct identifiers resolve with one getEntity/getMessages
+  // (channel, megagroup, basic group, or User) instead of scanning all dialogs.
+  if (findEntity && isDirectEntityQuery(findEntity)) {
+    if (/t\.me\/\+/.test(findEntity) || /joinchat/i.test(findEntity)) {
+      if (hasMtprotoConfig()) {
+        try {
+          await fetchSingleChatTranscript({ entityQuery: findEntity, sinceUtc, hourWindow: hours, maxMessages, logger });
+        } catch { /* invite hint via null */ }
+      }
+      return [];
+    }
+    if (hasMtprotoConfig()) {
+      try {
+        const single = await fetchSingleChatTranscript({ entityQuery: findEntity, sinceUtc, hourWindow: hours, maxMessages, logger });
+        if (single) return [single];
+      } catch (err) {
+        logger.debug({ err }, "Direct single-chat fetch failed (tool), falling back to bulk");
+      }
+    }
+    if (historyProvider) {
+      const trimmed = findEntity.trim();
+      const isBotDirect = /^@/.test(trimmed) || /^-?\d+$/.test(trimmed) || /^https?:\/\/t\.me\//i.test(trimmed) || /^t\.me\//i.test(trimmed);
+      if (isBotDirect) {
+        try {
+          const histories = await historyProvider();
+          const q = trimmed.replace(/^@/, "").toLowerCase();
+          const rawLower = trimmed.toLowerCase();
+          const hit = histories.find(
+            (h) =>
+              h.title.toLowerCase() === q ||
+              h.title.toLowerCase() === rawLower ||
+              String(h.chatId).toLowerCase() === rawLower ||
+              String(h.chatId) === trimmed,
+          );
+          if (hit) {
+            const singleBot = collectBotApiTranscripts([hit], { sinceUtc, hourWindow: hours, maxMessages }, logger);
+            if (singleBot.length > 0) return singleBot;
+          }
+        } catch { /* fall through */ }
+      }
+    }
+  }
+
+  // Try MTProto bulk first if configured
   if (hasMtprotoConfig()) {
     const mt = await fetchMtprotoTranscripts({
       sinceUtc,
@@ -178,5 +226,69 @@ export function createDigestTools(
     },
   };
 
-  return [digestChats, askChats];
+  const readChat: Tool = {
+    definition: {
+      name: "read_chat",
+      description:
+        "Read and summarize a SINGLE Telegram chat/channel/group by direct identifier — the efficient 'one chat from one entity' path. " +
+        "Accepts @username, t.me link, https://t.me/username, numeric channel/group id (-100...), or exact title. " +
+        "Handles broadcast channels, megagroups, basic groups, and private user chats. " +
+        "For private invite links (t.me/+... / joinchat/...) the bot must /join first — this tool never auto-joins.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          entity: { type: "string", description: "Chat identifier: @username, t.me link, numeric id (-100...), or exact title" },
+          hours: { type: "number", description: "Lookback window in hours (default 24, max 168)" },
+          max_points: { type: "number", description: "Max bullet points in the summary (default 14)" },
+        },
+        required: ["entity"],
+      },
+    },
+    async execute(args: Record<string, unknown>): Promise<ToolResult> {
+      const entity = String(args["entity"] ?? "").trim();
+      if (!entity) {
+        return { toolName: "read_chat", args, output: "", success: false, error: "entity is required (@username, t.me link, numeric id, or title)" };
+      }
+      const hours = parseHours(args["hours"]);
+      const maxPoints = Math.min(Math.max(Number(args["max_points"]) || 14, 1), 20);
+      const isInvite = /t\.me\/\+/.test(entity) || /joinchat/i.test(entity);
+      if (isInvite) {
+        return {
+          toolName: "read_chat",
+          args,
+          output: `Invite links require joining first — call the join flow (/join ${entity}) before reading. The read path never auto-joins.`,
+          success: true,
+        };
+      }
+
+      const provider = createLLMProviderFromEnv(log);
+      const transcripts = await resolveTranscripts(hours, entity, historyProvider, log);
+      if (transcripts.length === 0) {
+        const isDirect = isDirectEntityQuery(entity);
+        const hint = isDirect
+          ? `Could not read "${entity}" in the last ${hours}h. Direct lookup failed — chat may be private/not joined, have no messages in window, or identifier is wrong. For private channels/groups, join via invite first.`
+          : `No chat history for "${entity}" in the last ${hours}h. Try an @username, t.me link, numeric id, or exact title; or list available chats first.`;
+        return { toolName: "read_chat", args, output: hint, success: true };
+      }
+      // Prefer exact match when bulk returned multiple
+      const q = entity.replace(/^@/, "").toLowerCase();
+      let target = transcripts;
+      if (isDirectEntityQuery(entity) && transcripts.length > 1) {
+        const exact = transcripts.find((t) => t.title.toLowerCase() === q || t.title.toLowerCase() === entity.toLowerCase());
+        if (exact) target = [exact];
+        else {
+          const sub = transcripts.filter((t) => t.title.toLowerCase().includes(q));
+          if (sub.length > 0) target = sub.slice(0, 1);
+        }
+      } else if (transcripts.length > 1) {
+        const sub = transcripts.filter((t) => t.title.toLowerCase().includes(entity.toLowerCase()));
+        target = sub.length > 0 ? sub.slice(0, 1) : transcripts.slice(0, 1);
+      }
+      const perChat = await summarizeTranscripts(provider, target, { maxPoints }, log);
+      const lines = perChat.map((p) => `## ${p.title}\n${p.summary}`).join("\n\n");
+      return { toolName: "read_chat", args, output: lines, success: true };
+    },
+  };
+
+  return [digestChats, askChats, readChat];
 }

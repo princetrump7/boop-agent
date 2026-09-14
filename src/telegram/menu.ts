@@ -109,9 +109,9 @@ export function statusPanel(env: EnvConfig, toolsCount: number, backend: string)
     extras.push(`*Digest* — MTProto ${env.TELEGRAM_API_ID ? "configured" : "Bot-API fallback"}`);
     extras.push(`*Auto-digest* — ${env.AUTO_DIGEST_HOUR != null ? `${String(env.AUTO_DIGEST_HOUR).padStart(2, "0")}:00 ${env.TIMEZONE}` : "off"}`);
   }
-  if ((env as Record<string, unknown>).ALPACA_API_KEY) {
-    const mode = (env as Record<string, unknown>).DRY_RUN ? "DRY_RUN" : (env as Record<string, unknown>).ALPACA_PAPER ? "paper" : "live";
-    extras.push(`*Trading* — ${mode} · ${(env as Record<string, unknown>).SYMBOLS ?? ""}`);
+  {
+    const mode = (env as Record<string, unknown>).DRY_RUN ? "DRY_RUN" : "PAPER";
+    extras.push(`*Trading* — ${mode} · ${(env as Record<string, unknown>).SYMBOLS ?? ""} (simulated — Yahoo Finance, no keys needed)`);
   }
   return {
     text:
@@ -133,14 +133,13 @@ export function digestPanel(env: EnvConfig): Panel {
       `*Mode* — ${mode}\n` +
       `*Window* — ${env.DEFAULT_HOURS}h · ${env.MAX_CHATS} chats · ${env.MAX_MESSAGES} msgs/chat\n` +
       `*Auto* — ${env.AUTO_DIGEST_HOUR != null ? `${String(env.AUTO_DIGEST_HOUR).padStart(2, "0")}:00 ${env.TIMEZONE} daily` : "off (set AUTO_DIGEST_HOUR)"}\n\n` +
-      "Try:\n`/digest 24` · `/chats` · `/chat <name> 24` · `/ask what was decided? 24` · `/join <invite link>`",
+      "Try:\n`/digest 24` · `/chats` · `/chat <name> 24` · `/read @username|t.me/...|id [hours]` · `/ask what was decided? 24` · `/join <invite link>`",
     keyboard: Markup.inlineKeyboard([NAV_ROW]),
   };
 }
 
 export function tradingPanel(env: EnvConfig): Panel {
-  const hasKeys = Boolean((env as Record<string, unknown>).ALPACA_API_KEY);
-  const mode = hasKeys ? ((env as Record<string, unknown>).DRY_RUN ? "DRY_RUN (no orders)" : (env as Record<string, unknown>).ALPACA_PAPER ? "paper" : "LIVE") : "not configured";
+  const mode = (env as Record<string, unknown>).DRY_RUN ? "DRY_RUN (simulated)" : "PAPER (simulated — Yahoo Finance, no keys needed)";
   return {
     text:
       "📈 *Overnight Trading*\n\n" +

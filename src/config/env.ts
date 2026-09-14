@@ -114,7 +114,22 @@ const envSchema = z.object({
   CHUNK_CHARS: z.coerce.number().int().positive().default(15000),
   MAX_MSG_CHARS: z.coerce.number().int().positive().default(280),
 
-  // ── Overnight Trading (from overnight_telegram_stock_bot) ──
+  // ── Overnight Trading (Paper simulator — always works, no external broker) ──
+  // Zero-config paper trading. Yahoo Finance provides real prices (no key),
+  // FINNHUB_API_KEY is optional fallback. PAPER_EQUITY sets mock account size.
+  PAPER_EQUITY: z.coerce.number().positive().default(100000),
+  FINNHUB_API_KEY: z.string().optional(),
+  // Deprecated — kept optional so old .env with Alpaca/Tradier doesn't fail validation
+  TRADIER_API_KEY: z.string().optional(),
+  TRADIER_ACCOUNT_ID: z.string().optional(),
+  TRADIER_PAPER: z
+    .string()
+    .optional()
+    .default("true")
+    .transform((v) => {
+      const s = v.toLowerCase().trim();
+      return s === "1" || s === "true" || s === "yes" || s === "on";
+    }),
   ALPACA_API_KEY: z.string().optional(),
   ALPACA_API_SECRET: z.string().optional(),
   ALPACA_PAPER: z
@@ -141,6 +156,15 @@ const envSchema = z.object({
   ENTRY_MAX_MINUTES_TO_CLOSE: z.coerce.number().positive().max(240).default(30),
   EXIT_MIN_MINUTES_TO_OPEN: z.coerce.number().positive().default(10),
   EXIT_MAX_MINUTES_TO_OPEN: z.coerce.number().positive().max(10080).default(4320),
+
+  // ── folk engine (proactive accountability — better than folk.com) ──
+  // Morning briefing hour in TIMEZONE (default 7). Wind-down optional (unset = off).
+  BRIEFING_HOUR: z.coerce.number().int().min(0).max(23).default(7),
+  WIND_DOWN_HOUR: z.coerce.number().int().min(0).max(23).optional(),
+  // Minutes before an unanswered check-in gets a follow-up nudge.
+  FOLLOWUP_MINUTES: z.coerce.number().int().positive().default(120),
+  // Local JSON persistence for habits + memory graph (works without Convex).
+  FOLK_DB_PATH: z.string().default("folk.db.json"),
 
   // ── Bot Mode ────────────────────────────────────────
   // Only polling is supported. Webhook enum removed to avoid silent misconfig
@@ -242,9 +266,15 @@ export function hasMtprotoConfig(): boolean {
 }
 
 /**
- * Whether overnight trading (Alpaca) is configured.
+ * Whether overnight trading is configured.
+ * Paper simulator is always ready — no external keys required.
+ * Returns true so scheduler and /run_now work out of the box.
  */
 export function hasTradingConfig(): boolean {
-  const env = getEnv();
-  return Boolean(env.ALPACA_API_KEY && env.ALPACA_API_SECRET);
+  return true;
+}
+
+/** @deprecated use hasTradingConfig() — kept for compat */
+export function hasAlpacaConfig(): boolean {
+  return hasTradingConfig();
 }

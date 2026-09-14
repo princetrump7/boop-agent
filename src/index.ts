@@ -4,6 +4,8 @@ import { createRequire } from "node:module";
 import { getEnv } from "./config/env.js";
 import { createLogger } from "./config/logger.js";
 import { createBot } from "./telegram/bot.js";
+import { getHabitStore, getMemoryGraph } from "./folk/store.js";
+import { createFolkRouter } from "./folk/webapp.js";
 
 const require = createRequire(import.meta.url);
 const { version } = require("../package.json") as { version: string };
@@ -51,6 +53,10 @@ async function main(): Promise<void> {
   const app = express();
   const port = env.PORT;
   app.disable("x-powered-by");
+  app.use(express.json({ limit: "1mb" }));
+
+  // folk WebApp dashboard + JSON API (Telegram Mini App: /webapp, /api/folk/*)
+  app.use(createFolkRouter(getHabitStore(logger), getMemoryGraph(logger), logger));
 
   app.get("/health", async (_req, res) => {
     const checks: Record<string, { ok: boolean; latencyMs?: number; error?: string }> = {};
@@ -80,21 +86,10 @@ async function main(): Promise<void> {
             }),
           ]
         : []),
-      ...(env.ALPACA_API_KEY && env.ALPACA_API_SECRET
-        ? [
-            withTimeout("alpaca", async () => {
-              const base = env.ALPACA_PAPER ? "https://paper-api.alpaca.markets" : "https://api.alpaca.markets";
-              const r = await fetch(`${base}/v2/clock`, {
-                headers: {
-                  "APCA-API-KEY-ID": env.ALPACA_API_KEY!,
-                  "APCA-API-SECRET-KEY": env.ALPACA_API_SECRET!,
-                },
-                signal: AbortSignal.timeout(2500),
-              });
-              if (!r.ok) throw new Error(`alpaca ${r.status}`);
-            }),
-          ]
-        : []),
+      withTimeout("trading", async () => {
+        // Paper simulator — no external keys required. Health is PAPER_EQUITY + local NY clock.
+        if (!Number.isFinite(env.PAPER_EQUITY) || env.PAPER_EQUITY <= 0) throw new Error("PAPER_EQUITY invalid");
+      }),
       withTimeout("llm", async () => {
         const prov = botInstance.orchestrator.getProvider();
         // tiny probe — 1 token max, fail fast
@@ -128,7 +123,7 @@ async function main(): Promise<void> {
       name: "Boop Agent",
       version,
       description:
-        "Unified AI agent for Telegram — Anthropic + OpenAI, Convex-backed persistent state, and extensible tool system.",
+        "Boop — proactive accountability friend on Telegram (folk.com parity + better): habits that text first, streaks, morning briefings, memory graph, WebApp dashboard. Plus link/file reading, digests, paper trading.",
     });
   });
 

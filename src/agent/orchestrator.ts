@@ -14,6 +14,10 @@ import { createDraftTools } from "../tools/drafts.js";
 import { createMemoryTools } from "../tools/memory.js";
 import { createDigestTools } from "../tools/digest.js";
 import { createTradingTools } from "../tools/trading.js";
+import { createFolkHabitTools } from "../tools/folk-habits.js";
+import { createFolkMemoryTools } from "../tools/folk-memory.js";
+import { createFolkPackTools } from "../tools/folk-packs.js";
+import { getHabitStore, getMemoryGraph } from "../folk/store.js";
 import type { BotApiChatHistory } from "../digest/session.js";
 import type { RuntimeRunResult } from "../runtimes/types.js";
 
@@ -123,13 +127,27 @@ export class Orchestrator {
     } catch (err) {
       this.logger.warn({ err }, "Failed to register digest tools");
     }
-    // Trading tools (paper/dry-run safe even without Alpaca keys)
+    // Trading tools (paper simulator — Yahoo Finance, no keys needed)
     try {
       for (const t of createTradingTools(this.logger)) {
         this.toolRegistry.register(t);
       }
     } catch (err) {
       this.logger.warn({ err }, "Failed to register trading tools");
+    }
+    // folk engine — proactive habits + memory graph (texts first, remembers everything)
+    try {
+      for (const t of createFolkHabitTools(getHabitStore(this.logger), this.logger)) {
+        this.toolRegistry.register(t);
+      }
+      for (const t of createFolkMemoryTools(getMemoryGraph(this.logger), this.logger)) {
+        this.toolRegistry.register(t);
+      }
+      for (const t of createFolkPackTools(getHabitStore(this.logger), getMemoryGraph(this.logger), this.logger)) {
+        this.toolRegistry.register(t);
+      }
+    } catch (err) {
+      this.logger.warn({ err }, "Failed to register folk tools");
     }
     this.logger.debug(`Registered ${this.toolRegistry.size} default tools`);
   }
