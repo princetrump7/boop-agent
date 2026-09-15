@@ -23,7 +23,7 @@ services:
       - key: OPENAI_API_KEY
         sync: false
       - key: OPENAI_MODEL
-        value: openai/gpt-oss-120b
+        value: openrouter/free
       - key: OPENAI_BASE_URL
         value: https://openrouter.ai/api/v1
       # Digest uses same LLM provider — no separate LLM vars needed
