@@ -369,9 +369,9 @@ async function load() {
         html += '<span>' + esc(h.daysLabel) + ' @ ' + esc(h.times.join(', ')) + '</span></div></div>';
         html += '<div class="habit-streak">🔥' + h.streak + '</div>';
         html += '<div class="habit-actions">';
-        html += '<button class="btn btn-done" onclick="logHabit(\\'' + esc(h.name) + '\\',\\'done\\')">✓</button>';
-        html += '<button class="btn btn-miss" onclick="logHabit(\\'' + esc(h.name) + '\\',\\'missed\\')">✗</button>';
-        html += '<button class="btn btn-skip" onclick="togglePause(\\'' + esc(h.name) + '\\',\\'' + h.paused + '\\')">' + (h.paused ? '▶' : '⏸') + '</button>';
+        html += '<button class="btn btn-done" onclick="logHabit(this.dataset.n,\'done\')" data-n="' + esc(h.name) + '">✓</button>';
+        html += '<button class="btn btn-miss" onclick="logHabit(this.dataset.n,\'missed\')" data-n="' + esc(h.name) + '">✗</button>';
+        html += '<button class="btn btn-skip" onclick="togglePause(this.dataset.n,this.dataset.p)" data-n="' + esc(h.name) + '" data-p="' + h.paused + '">' + (h.paused ? '▶' : '⏸') + '</button>';
         html += '</div></div>';
       });
     } else {
@@ -382,7 +382,7 @@ async function load() {
     /* packs */
     html += '<div class="card"><div class="card-title">Mini-Folks</div><div class="pack-grid">';
     j.packs.forEach(p => {
-      html += '<div class="pack' + (p.hired ? ' hired' : '') + '" onclick="hire(\\'' + p.id + '\\')">';
+      html += '<div class="pack' + (p.hired ? ' hired' : '') + '" onclick="hire(this.dataset.p)" data-p="' + p.id + '">';
       html += '<div class="emoji">' + p.emoji + '</div>';
       html += '<div class="name">' + esc(p.name) + '</div>';
       html += '<div class="tag">' + esc(p.tagline) + '</div>';
@@ -398,7 +398,7 @@ async function load() {
         html += '<div class="memo">' + memoIcon(m.kind);
         html += '<div class="memo-body"><div class="memo-label">' + esc(m.label) + '</div>';
         html += '<div class="memo-detail">' + esc(m.detail.slice(0, 140)) + '</div></div>';
-        html += '<button class="memo-del" onclick="forget(\\'' + esc(m.label) + '\\')">✕</button></div>';
+        html += '<button class="memo-del" onclick="forget(this.dataset.l)" data-l="' + esc(m.label) + '">✕</button></div>';
       });
     } else {
       html += '<div class="empty"><div class="icon">🧠</div><div class="msg">Nothing remembered yet — <code>/remember goal marathon : under 4h</code></div></div>';
