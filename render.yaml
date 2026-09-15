@@ -98,7 +98,7 @@ services:
         value: folk.db.json
       # Public base URL enables the /boop WebApp dashboard button.
       - key: PUBLIC_URL
-        sync: false
+        value: https://boop-agent.onrender.com
       # ── Bot Mode ──
       - key: BOT_MODE
         value: polling
