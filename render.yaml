@@ -25,7 +25,7 @@ services:
       - key: OPENAI_MODEL
         value: openai/gpt-oss-120b
       - key: OPENAI_BASE_URL
-        value: https://api.groq.com/openai/v1
+        value: https://openrouter.ai/api/v1
       # Digest uses same LLM provider — no separate LLM vars needed
       # ── Digest / MTProto (optional but wired) ──
       - key: TELEGRAM_API_ID
