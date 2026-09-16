@@ -374,7 +374,7 @@ function render(j) {
         + '</div></div>'
         + '<div class="habit-streak">' + (h.streak || 0) + 'd</div>'
         + '<div class="habit-actions">'
-        + '<button class="btn btn-done" onclick="logHabit(this.dataset.n,\'done\')" data-n="' + esc(h.name) + '">Done</button>'
+        + '<button class="btn btn-done" onclick="logHabit(this.dataset.n,this.dataset.s)" data-n="' + esc(h.name) + '" data-s="done">Done</button>'
         + '<button class="btn btn-ghost" onclick="togglePause(this.dataset.n,this.dataset.p)" data-n="' + esc(h.name) + '" data-p="' + h.paused + '">' + (h.paused ? 'Resume' : 'Pause') + '</button>'
         + '</div></div>';
     }
