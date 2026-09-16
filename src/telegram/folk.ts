@@ -37,14 +37,14 @@ export function registerFolkCommands(
     const chatId = String(ctx.chat?.id ?? "unknown");
     const userId = String(ctx.from?.id ?? "unknown");
     if (!args || args === "help") {
-      await sendLongMessage(ctx, `🎯 *Habits — I text you first*\n\n${commandList([
-        ["/habit <name> <days> <time> [tone] [proof]", "e.g. /habit gym Mon/Wed/Fri 07:00 relentless proof"],
-        ["/habits", "list with streaks"],
+      await sendLongMessage(ctx, `*Habits — I text you first*\n\n${commandList([
+        ["/habit <name> <days> <time> [tone] [proof]", "e.g. /habit gym Mon/Wed/Fri 07:00 firm proof"],
+        ["/habits", "your lineup with streaks"],
         ["/done <name>", "log it done"],
-        ["/missed <name>", "log a miss (uses streak freeze first)"],
+        ["/missed <name>", "log a miss"],
         ["/pause <name> · /resume <name>", "pause / resume"],
-        ["/streak", "streaks + accountability score"],
-        ["/briefing", "morning briefing now"],
+        ["/streak", "streaks + score"],
+        ["/briefing", "today's briefing now"],
       ])}\n\nTones: gentle · steady · firm · relentless.`);
       return;
     }
@@ -69,7 +69,7 @@ export function registerFolkCommands(
       proofRequired,
     });
     log.debug({ habitId: h.id }, "Habit created");
-    await sendLongMessage(ctx, `✅ *${escapeMarkdown(h.name)}* locked in.\n\n${formatDays(h.schedule.days)} @ ${h.schedule.times.join(", ")} · tone *${h.tone}*${h.proofRequired ? " · proof required 📸" : ""}\n\nI'll text you first — reply DONE when you finish and I keep the streak 🔥`);
+    await sendLongMessage(ctx, `*${escapeMarkdown(h.name)}* is live.\n\n${formatDays(h.schedule.days)} · ${h.schedule.times.join(", ")} · ${h.tone}${h.proofRequired ? " · photo proof" : ""}\n\nI'll text you first — reply DONE when you finish.`);
   });
 
   bot.command("habits", async (ctx: Context) => {
@@ -79,8 +79,8 @@ export function registerFolkCommands(
       await ctx.reply("No habits yet. Try `/habit gym daily 07:00` — I'll check in on you.", { parse_mode: "Markdown" });
       return;
     }
-    const lines = all.map((h) => `• *${escapeMarkdown(h.name)}* — ${formatDays(h.schedule.days)} @ ${h.schedule.times.join(", ")} — 🔥${h.streak} (best ${h.longestStreak}) — ${h.paused ? "paused ⏸️" : h.tone}${h.proofRequired ? " 📸" : ""}`);
-    await sendLongMessage(ctx, `🎯 *Your habits*\n\n${lines.join("\n")}`);
+    const lines = all.map((h) => `• *${escapeMarkdown(h.name)}* — ${formatDays(h.schedule.days)} · ${h.schedule.times.join(", ")} — ${h.streak}d streak${h.paused ? " (paused)" : ""}`);
+    await sendLongMessage(ctx, `*Your lineup*\n\n${lines.join("\n")}`);
   });
 
   const logDone = async (ctx: Context, status: "done" | "missed") => {
@@ -100,8 +100,8 @@ export function registerFolkCommands(
     const cur = habits.get(h.id)!;
     await ctx.reply(
       status === "done"
-        ? `🔥 *${cur.name}* logged — streak *${cur.streak}* (best ${cur.longestStreak}). Proud of you.`
-        : `📝 *${cur.name}* marked missed — streak *${cur.streak}* (freezes left: ${cur.freezes}). Tomorrow we bounce back.`,
+        ? `Logged. *${cur.name}* — *${cur.streak}d* streak (best ${cur.longestStreak}).`
+        : `Missed. *${cur.name}* — streak ${cur.streak}d, ${cur.freezes} freezes left. Tomorrow.`,
       { parse_mode: "Markdown" },
     );
   };
@@ -115,7 +115,7 @@ export function registerFolkCommands(
     const h = habits.findByName(chatId, name);
     if (!h) { await ctx.reply("⚠️ Which habit? `/pause <name>`", { parse_mode: "Markdown" }); return; }
     habits.pause(h.id, true);
-    await ctx.reply(`⏸️ *${h.name}* paused. I'll stay quiet until you /resume it.`, { parse_mode: "Markdown" });
+    await ctx.reply(`*${h.name}* paused. I'll stay quiet until you /resume it.`, { parse_mode: "Markdown" });
   });
 
   bot.command("resume", async (ctx: Context) => {
@@ -124,7 +124,7 @@ export function registerFolkCommands(
     const h = habits.findByName(chatId, name);
     if (!h) { await ctx.reply("⚠️ Which habit? `/resume <name>`", { parse_mode: "Markdown" }); return; }
     habits.pause(h.id, false);
-    await ctx.reply(`▶️ *${h.name}* resumed — back on track 🔥`, { parse_mode: "Markdown" });
+    await ctx.reply(`*${h.name}* resumed — back on.`, { parse_mode: "Markdown" });
   });
 
   bot.command("streak", async (ctx: Context) => {
@@ -132,8 +132,8 @@ export function registerFolkCommands(
     const all = habits.list(chatId);
     const s = habits.score(chatId);
     if (all.length === 0) { await ctx.reply("No streaks yet — create one with /habit."); return; }
-    const lines = all.map((h) => `• *${escapeMarkdown(h.name)}*: 🔥${h.streak} (best ${h.longestStreak}, ✅${h.totalCheckins} ❌${h.totalMisses})`);
-    await sendLongMessage(ctx, `🔥 *Streaks*\n\n${lines.join("\n")}\n\n📊 Accountability: *${s.pct}%* (${s.done}/${s.scheduled})`);
+    const lines = all.map((h) => `• *${escapeMarkdown(h.name)}* — ${h.streak}d (best ${h.longestStreak})`);
+    await sendLongMessage(ctx, `*Streaks — ${s.pct}% on track* (${s.done}/${s.scheduled} this week)\n\n${lines.join("\n")}`);
   });
 
   bot.command("briefing", async (ctx: Context) => {
@@ -158,15 +158,15 @@ export function registerFolkCommands(
     }
     const kind = (KINDS as string[]).includes(m[1].toLowerCase()) ? (m[1].toLowerCase() as MemoryNodeKind) : "fact";
     const node = memory.remember({ chatId, kind, label: m[2].trim(), detail: m[3].trim() });
-    await ctx.reply(`🧠 Remembered [${node.kind}] *${node.label}*. I'll use it in check-ins.`, { parse_mode: "Markdown" });
+    await ctx.reply(`Remembered: *${node.label}*. I'll use it in check-ins.`, { parse_mode: "Markdown" });
   });
 
   bot.command("recall", async (ctx: Context) => {
     const chatId = String(ctx.chat?.id ?? "unknown");
     const q = extractCommandArgs(ctx);
     const hits = memory.search(chatId, q);
-    if (hits.length === 0) { await ctx.reply("🧠 Nothing remembered yet — tell me about yourself with /remember."); return; }
-    await sendLongMessage(ctx, `🧠 *What I remember*\n\n${hits.map((n) => `• [${n.kind}] *${escapeMarkdown(n.label)}*: ${escapeMarkdown(n.detail.slice(0, 200))}`).join("\n")}`);
+    if (hits.length === 0) { await ctx.reply("Nothing remembered yet — send /remember to teach me about you."); return; }
+    await sendLongMessage(ctx, `*Remembered*\n\n${hits.map((n) => `• *${escapeMarkdown(n.label)}*: ${escapeMarkdown(n.detail.slice(0, 200))}`).join("\n")}`);
   });
 
   bot.command("forget", async (ctx: Context) => {
@@ -184,8 +184,8 @@ export function registerFolkCommands(
       await ctx.reply("⚠️ No packs in that category. Try /packs to see them all.");
       return;
     }
-    const lines = packs.map((p) => `${p.emoji} *${p.name}* — \`/hire ${p.id}\`\n_${p.tagline}_`);
-    await sendLongMessage(ctx, `🛍️ *Mini-folks — hire one, it starts texting you*\n\n${lines.join("\n\n")}`);
+    const lines = packs.map((p) => `${p.emoji} *${p.name}* — \`/hire ${p.id}\`\n${p.tagline}`);
+    await sendLongMessage(ctx, `*Coaches — hire one, it starts texting you*\n\n${lines.join("\n\n")}`);
   });
 
   bot.command("hire", async (ctx: Context) => {
@@ -203,20 +203,20 @@ export function registerFolkCommands(
     }
     log.debug({ packId: r.pack.id }, "Pack hired");
     const lines = [
-      `${r.pack.emoji} *${r.pack.name} hired.* ${r.pack.tagline}`,
-      ...r.habitsCreated.map((h) => `✅ ${h} — I'll text you first`),
-      ...r.habitsSkipped.map((h) => `ℹ️ ${h} already active`),
+      `*${r.pack.name}* hired. ${r.pack.tagline}`,
+      ...r.habitsCreated.map((h) => `• ${h} — I'll text you first`),
+      ...r.habitsSkipped.map((h) => `• ${h} already active`),
     ];
     await sendLongMessage(ctx, lines.join("\n"));
   });
 
   bot.command("boop", async (ctx: Context) => {    const url = webAppUrl();
     if (!url) {
-      await ctx.reply("📱 The WebApp needs PUBLIC_URL set on the server. Meanwhile /habits, /streak and /briefing work right here.");
+      await ctx.reply("Dashboard isn't configured yet (PUBLIC_URL). Meanwhile /habits, /streak and /briefing work right here.");
       return;
     }
-    await ctx.reply("📱 Open your dashboard:", {
-      reply_markup: { inline_keyboard: [[{ text: "Open Boop dashboard", web_app: { url } }]] },
+    await ctx.reply("Your dashboard:", {
+      reply_markup: { inline_keyboard: [[{ text: "Open dashboard", web_app: { url } }]] },
     } as unknown as Parameters<Context["reply"]>[1]);
   });
 }
@@ -242,10 +242,10 @@ export async function runFolkTick(now: Date, deps: FolkTickDeps): Promise<void> 
   for (const { habit, date, time } of deps.habits.dueToSend(now, tz)) {
     deps.habits.markSent(habit.id, date, time);
     const copy = TONE_COPY[habit.tone];
-    const proof = habit.proofRequired ? " Send proof 📸" : "";
+    const proof = habit.proofRequired ? " Send a photo." : "";
     await deps.send(
       habit.chatId,
-      `👋 *${habit.name}* — ${copy.nudge}${proof}\n\nStreak 🔥${habit.streak}. Reply \`/done ${habit.name}\` when finished.`,
+      `*${habit.name}* — ${copy.nudge}${proof}\n\n${habit.streak}d streak. Reply \`/done ${habit.name}\` when finished.`,
     ).catch((err) => deps.logger.warn({ err, habitId: habit.id }, "Check-in send failed"));
   }
 
@@ -254,7 +254,7 @@ export async function runFolkTick(now: Date, deps: FolkTickDeps): Promise<void> 
     const h = deps.habits.get(c.habitId);
     if (!h) continue;
     deps.habits.bumpFollowup(c.id);
-    await deps.send(h.chatId, `⏰ *${h.name}* — ${TONE_COPY[h.tone].followup} (streak 🔥${h.streak} on the line)`).catch(
+    await deps.send(h.chatId, `*${h.name}* — ${TONE_COPY[h.tone].followup} (${h.streak}d streak on the line)`).catch(
       (err) => deps.logger.warn({ err, checkinId: c.id }, "Follow-up send failed"),
     );
   }
